@@ -1,0 +1,17 @@
+.idea/
+.vscode/
+
+node_modules/
+
+venv/
+
+.env
+config.local.yml
+
+dist/
+build/
+*.class
+*.jar
+
+*.log
+logs/
