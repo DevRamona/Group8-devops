@@ -4,20 +4,22 @@
 
 ## African Context
 
-[Explain what problem this solves and why it matters in an African context]
+Smallholder farmers across Africa,especially in Rwanda,often struggle with unpredictable weather and volatile crop prices. Many plant late due to lack of reliable rainfall data or sell their produce cheaply because they can’t track price fluctuations. Our App bridges this gap by combining real-time weather alerts and market intelligence for staple crops like maize and potatoes. By doing so, it empowers farmers to make data-driven decisions, plan planting seasons effectively, and connect directly with bulk buyers without relying on middlemen.
 
 ## Team Members
 
-- [Name] - [Role] - [Student ID]
-- [Name] - [Role] - [Student ID]
-- [Name] - [Role] - [Student ID]
+- [Nana] - [Role] - [Student ID]
+- [Ramona] - [Role] - [Student ID]
+- [Cecilia] - [Role] - [Student ID]
 
 ## Project Overview
 
 [2-3 paragraph description of what this application does]
 
 ### Target Users
-[Who will use this application?]
+     Smallholder and commercial farmers (especially maize and potato growers)
+     Produce buyers and wholesalers
+     Government agricultural agencies (e.g., FRA)
 
 ### Core Features
 - Feature 1: [Description]
