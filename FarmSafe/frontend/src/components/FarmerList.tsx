@@ -55,8 +55,16 @@ const FarmerList: React.FC = () => {
           {farmers.map((farmer) => (
             <Link key={farmer.id} to={`/farmer/${farmer.id}`} className="farmer-card-link">
               <div className="farmer-card">
+                {farmer.profilePicture && (
+                  <img
+                    src={farmer.profilePicture}
+                    alt={`${farmer.name} profile`}
+                    className="farmer-profile-pic"
+                  />
+                )}
                 <h3>{farmer.name}</h3>
-                <p><strong>Email:</strong> {farmer.email}</p>
+                <p><strong>Email:</strong> <a href={`mailto:${farmer.email}`} className="email-link">{farmer.email}</a></p>
+                {farmer.phoneNumber && <p><strong>Phone:</strong> <a href={`tel:${farmer.phoneNumber}`} className="phone-link">{farmer.phoneNumber}</a></p>}
                 <p><strong>Joined:</strong> {new Date(farmer.createdAt).toLocaleDateString()}</p>
                 {farmer.location && <p><strong>Location:</strong> {farmer.location}</p>}
                 {farmer.farmSize && <p><strong>Farm Size:</strong> {farmer.farmSize} hectares</p>}

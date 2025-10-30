@@ -9,6 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+// Serve static files from pictures directory
+app.use('/pictures', express.static('./src/pictures'));
 app.use(cors());
 app.use(express.json());
 

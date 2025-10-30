@@ -67,8 +67,8 @@ const FarmerProfile: React.FC = () => {
         )}
         <div className="profile-info">
           <h3>{farmer.name}</h3>
-          <p><strong>Email:</strong> {farmer.email}</p>
-          {farmer.phoneNumber && <p><strong>Phone:</strong> {farmer.phoneNumber}</p>}
+          <p><strong>Email:</strong> <a href={`mailto:${farmer.email}`} className="email-link">{farmer.email}</a></p>
+          {farmer.phoneNumber && <p><strong>Phone:</strong> <a href={`tel:${farmer.phoneNumber}`} className="phone-link">{farmer.phoneNumber}</a></p>}
           <p><strong>Joined:</strong> {new Date(farmer.createdAt).toLocaleDateString()}</p>
           <p><strong>ID:</strong> {farmer.id}</p>
           {farmer.location && <p><strong>Location:</strong> {farmer.location}</p>}

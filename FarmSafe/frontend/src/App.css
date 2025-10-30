@@ -105,6 +105,16 @@ body {
   color: #000;
 }
 
+/* Farmer profile picture styling */
+.farmer-profile-pic {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 10px;
+  border: 2px solid #2c3e50;
+}
+
 /* Farmer card link styling */
 .farmer-card-link {
   text-decoration: none;
@@ -157,5 +167,17 @@ body {
 
 .profile-info strong {
   color: #000;
+}
+
+/* Email and phone link styling */
+.email-link, .phone-link {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: normal;
+}
+
+.email-link:hover, .phone-link:hover {
+  text-decoration: underline;
+  color: #0056b3;
 }
 
