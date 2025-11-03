@@ -1,150 +1,115 @@
-# AgriConnect - Agricultural Platform
+# FarmSafe
 
-> Connecting African Agriculture through Modern Technology
+> Empowering Rwandan farmers with technology-driven agricultural solutions
 
 ## African Context
 
-AgriConnect addresses the critical need for digital transformation in African agriculture. With over 60% of Africa's population engaged in agriculture, there's a massive opportunity to improve productivity, market access, and sustainability through technology. This platform empowers farmers with tools for better crop management, weather forecasting, market connections, and community support.
+FarmSafe addresses critical challenges faced by smallholder farmers in Rwanda, where agriculture employs over 70% of the population but faces significant hurdles including climate change impacts, limited access to market information, and inadequate weather tracking. By providing localized weather data, crop price tracking, and farmer management tools tailored to Rwandan agricultural conditions, FarmSafe helps farmers make informed decisions that can improve yields, reduce losses, and increase income in one of Africa's most agriculture-dependent economies.
 
 ## Team Members
 
-- [Name] - Authentication & User Management - [Student ID]
-- [Name] - [Role] - [Student ID]
-- [Name] - [Role] - [Student ID]
+- Nana Koramah Abeasi - Frontend developer
+- Ramona Ingabire - DevOps engineer
+- Cecilia Munayani Banda - Backend developer
 
 ## Project Overview
 
-AgriConnect is a comprehensive agricultural platform designed specifically for African farmers. The application provides a digital ecosystem where farmers can access weather information, market prices, farming techniques, and connect with agricultural experts and fellow farmers. The platform focuses on sustainability, community building, and economic empowerment.
+FarmSafe is a comprehensive web application designed to support Rwandan farmers by providing essential agricultural information and management tools. The platform serves as a centralized hub where farmers can access personalized profiles, track seasonal weather patterns specific to their regions, monitor crop prices, and manage their farming operations more effectively.
+
+The application features a modern, responsive interface with a clean design that prioritizes usability for farmers who may have varying levels of digital literacy. By focusing on Rwanda's agricultural context, FarmSafe incorporates local crop varieties, regional weather patterns, and market dynamics specific to East African farming communities.
 
 ### Target Users
-- Small to medium-scale farmers across Africa
-- Agricultural cooperatives and organizations
-- Agricultural extension workers and consultants
-- Agricultural product buyers and suppliers
+- Smallholder farmers in Rwanda
+- Agricultural cooperatives and associations
+- Wholesale crop buyers
+- Farm managers and agricultural consultants
 
 ### Core Features
-- **User Authentication**: Secure login and registration system with validation
-- **Farm Management**: Track crops, livestock, and farm activities
-- **Weather Integration**: Real-time weather forecasts and alerts
-- **Marketplace**: Buy and sell agricultural products
-- **Community Forum**: Connect with other farmers and experts
-- **Educational Resources**: Access to farming best practices and techniques
+- **Farmer Profiles**: Comprehensive farmer management with contact information, farm details, and crop specialization
+- **Regional Weather Tracking**: Localized weather information tailored to Rwandan districts and farming seasons
+- **Crop Price Monitoring**: Real-time market price tracking for major Rwandan crops
 
 ## Technology Stack
 
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript (ES6+)
-- **Authentication**: Custom JavaScript authentication system
-- **Storage**: Local Storage for user data and sessions
-- **Styling**: Modern CSS with agricultural theme
-- **Icons**: Font Awesome
-- **Responsive Design**: Mobile-first approach
+- **Backend**: Node.js/Express with TypeScript
+- **Frontend**: React with TypeScript and Vite
+- **Database**: Sequelize ORM with mock data for development
+- **Other**: React Router for navigation, React Icons for UI elements, CORS for API communication
 
 ## Getting Started
 
 ### Prerequisites
-- Modern web browser (Chrome, Firefox, Safari, Edge)
-- No additional software installation required
+- Node.js 16+ and npm
+- Git
 
 ### Installation
 
 1. Clone the repository
 ```bash
-git clone [your-repo-url]
-cd Group8-devops
+   git clone [your-repo-url]
+   cd Group8-devops
 ```
 
-2. Open the project in your browser
+2. Install backend dependencies
 ```bash
-# Option 1: Open index.html directly in your browser
-# Option 2: Use a local server (recommended)
-python -m http.server 8000
-# Then visit http://localhost:8000
+   cd FarmSafe/backend
+   npm install
+```
+
+3. Install frontend dependencies
+```bash
+   cd ../frontend
+   npm install
+```
+
+4. Build and start the backend
+```bash
+   cd ../backend
+   npm run build
+   npm start
+```
+
+5. Start the frontend (in a new terminal)
+```bash
+   cd ../frontend
+   npm run dev
 ```
 
 ### Usage
 
-#### For New Users:
-1. Click "Sign Up" button
-2. Fill in the registration form with your details
-3. Select your farm type and location
-4. Create a strong password
-5. Agree to terms and conditions
-6. Click "Create Account"
-
-#### For Existing Users:
-1. Click "Login" button
-2. Enter your email and password
-3. Click "Sign In"
-
-#### Sample Accounts (for testing):
-- Email: `john@example.com`, Password: `Password123!`
-- Email: `jane@example.com`, Password: `Password123!`
-
-### Features Implemented
-
-#### Authentication System:
-- ✅ User registration with comprehensive validation
-- ✅ Secure login system
-- ✅ Password strength indicator
-- ✅ Form validation with real-time feedback
-- ✅ Session management with local storage
-- ✅ Responsive design for mobile and desktop
-- ✅ Modern UI with agricultural theme
-
-#### Security Features:
-- ✅ Email format validation
-- ✅ Phone number validation
-- ✅ Strong password requirements
-- ✅ Password confirmation matching
-- ✅ Terms and conditions agreement
-- ✅ Input sanitization
-
-#### User Experience:
-- ✅ Smooth animations and transitions
-- ✅ Mobile-responsive design
-- ✅ Loading states for form submissions
-- ✅ Success/error notifications
-- ✅ Password visibility toggle
-- ✅ Modal-based forms
+1. Open your browser and navigate to `http://localhost:5173`
+2. Browse the farmer list to see all registered farmers
+3. Click on any farmer card to view their detailed profile
+4. Use the sidebar navigation for different sections (Profile, Weather, Crop Prices)
 
 ## Project Structure
+
 ```
-Group8-devops/
-├── index.html          # Main HTML file with forms and UI
-├── styles.css          # CSS styling with agricultural theme
-├── auth.js            # JavaScript authentication system
-└── README.md          # Project documentation
+FarmSafe/
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   └── server.ts
+│   ├── dist/
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── App.tsx
+│   ├── public/
+│   └── package.json
+└── README.md
 ```
-
-## Technical Implementation
-
-### Authentication Flow:
-1. **Registration**: Validates all fields, checks for existing users, creates new account
-2. **Login**: Authenticates credentials, manages user session
-3. **Session Management**: Uses localStorage for persistent login
-4. **Validation**: Real-time form validation with error messages
-5. **Security**: Password strength checking and input sanitization
-
-### Key JavaScript Classes:
-- `AuthSystem`: Main authentication class handling all auth operations
-- Form validation methods for email, phone, password strength
-- Local storage management for user data and sessions
-- UI state management for login/logout states
-
-## Future Enhancements
-
-- [ ] Password hashing for enhanced security
-- [ ] Email verification system
-- [ ] Password reset functionality
-- [ ] Social media login integration
-- [ ] Multi-language support for African languages
-- [ ] Offline functionality for rural areas
 
 ## Links
 
-- [Project Board](link-to-github-projects)
-- [Live Demo](http://localhost:8000)
+- [Project Board] https://github.com/users/DevRamona/projects/1
 
 ## License
 
-MIT License - Feel free to use this project for educational purposes
+This project is licensed under the [MIT License].
+
+Copyright (c) 2025 FarmSafe
