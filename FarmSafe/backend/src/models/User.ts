@@ -1,8 +1,18 @@
-import { DataTypes, Model } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose, { Schema, Document } from 'mongoose';
 
-interface UserAttributes {
-  id: number;
+const userSchema = new Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true, index: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['farmer', 'admin'], default: 'farmer', required: true },
+  location: { type: String },
+  farmSize: { type: Number },
+  crops: { type: String },
+  profilePicture: { type: String },
+  phoneNumber: { type: String },
+}, { timestamps: true });
+
+export interface UserDocument extends Document {
   name: string;
   email: string;
   password: string;
@@ -12,76 +22,9 @@ interface UserAttributes {
   crops?: string;
   profilePicture?: string;
   phoneNumber?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-class User extends Model<UserAttributes> implements UserAttributes {
-  public id!: number;
-  public name!: string;
-  public email!: string;
-  public password!: string;
-  public role!: 'farmer' | 'admin';
-  public location?: string;
-  public farmSize?: number;
-  public crops?: string;
-  public profilePicture?: string;
-  public phoneNumber?: string;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
-}
-
-User.init(
-  {
-    id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true,
-    },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    email: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-    },
-    password: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    role: {
-      type: DataTypes.ENUM('farmer', 'admin'),
-      allowNull: false,
-      defaultValue: 'farmer',
-    },
-    location: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    farmSize: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-    },
-    crops: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    profilePicture: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    phoneNumber: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-  },
-  {
-    sequelize,
-    modelName: 'User',
-    tableName: 'users',
-  }
-);
-
+const User = mongoose.model<UserDocument>('User', userSchema);
 export default User;
