@@ -1,42 +1,41 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { FaUser, FaCloudSun, FaChartLine } from 'react-icons/fa';
 import FarmerList from './components/FarmerList';
 import FarmerProfile from './pages/FarmerProfile';
+import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import './App.css';
+
+const Protected: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { token } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+};
 
 function App() {
   return (
-    <Router>
-      <div className="App">
-        <div className="logo">
-          <h1>FarmSafe</h1>
+    <AuthProvider>
+      <Router>
+        <div className="App">
+          <div className="logo">
+            <h1>FarmSafe</h1>
+          </div>
+          <div className="layout">
+            <main className="main-content" style={{ width: '100%' }}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+                <Route path="/farmer/:id" element={<Protected><FarmerProfile /></Protected>} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+              </Routes>
+            </main>
+          </div>
         </div>
-        <div className="layout">
-          <nav className="sidebar">
-            <ul>
-              <li>
-                <FaUser />
-                <span>Profile</span>
-              </li>
-              <li>
-                <FaCloudSun />
-                <span>Seasonal Weather</span>
-              </li>
-              <li>
-                <FaChartLine />
-                <span>Crop Price Tracker</span>
-              </li>
-            </ul>
-          </nav>
-          <main className="main-content">
-            <Routes>
-              <Route path="/" element={<FarmerList />} />
-              <Route path="/farmer/:id" element={<FarmerProfile />} />
-            </Routes>
-          </main>
-        </div>
-      </div>
-    </Router>
+      </Router>
+    </AuthProvider>
   );
 }
 
