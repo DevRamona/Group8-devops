@@ -60,19 +60,25 @@ body {
 
 /* Main content */
 .main-content {
-  margin-left: 200px;
-  margin-top: 20px; /* bring down */
+  margin-left: 0; /* no sidebar */
+  margin-top: 20px;
   padding: 20px;
-  display: flex;
-  justify-content: center;
+  display: block;
 }
 
 /* Farmers grid layout */
 .farmers-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(1, 1fr);
   gap: 20px;
   padding: 20px 0;
+}
+
+@media (min-width: 640px) {
+  .farmers-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+  .farmers-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 .farmer-card {

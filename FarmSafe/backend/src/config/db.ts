@@ -1,16 +1,11 @@
-import { Sequelize } from 'sequelize';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'farmsafe_db',
-  process.env.DB_USER || 'root',
-  process.env.DB_PASSWORD || '',
-  {
-    host: process.env.DB_HOST || 'localhost',
-    dialect: 'mysql',
-  }
-);
+export async function connectToDatabase(): Promise<void> {
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/farmsafe_db';
+  await mongoose.connect(uri);
+}
 
-export default sequelize;
+export default mongoose;
