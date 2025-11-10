@@ -1,6 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { FaUser, FaCloudSun, FaChartLine } from 'react-icons/fa';
-import FarmerList from './components/FarmerList';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import FarmerProfile from './pages/FarmerProfile';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';

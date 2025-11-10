@@ -50,11 +50,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('auth');
   };
 
-  const value = useMemo(() => ({ user, token, login, register, logout }), [user, token]);
+  const value = useMemo(() => ({ user, token, login, register, logout }), [user, token, login, register]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => {
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
