@@ -65,7 +65,7 @@ cd Group8-devops/FarmSafe
 
 2. **Create environment file**
 ```bash
-# Create .env file in FarmSafe directory (optional, defaults are provided)
+
 echo "JWT_SECRET=your_secret_key_here" > .env
 ```
 
@@ -105,9 +105,7 @@ cd Group8-devops
 3. **Configure backend environment**
 ```bash
 cd FarmSafe/backend
-# Copy env.example to .env and update values
 cp env.example .env
-# Edit .env and set MONGO_URI and JWT_SECRET
 ```
 
 4. **Install backend dependencies**
@@ -158,11 +156,9 @@ The `docker-compose.yml` file orchestrates three services:
 ### Building Individual Services
 
 ```bash
-# Build backend only
 cd FarmSafe/backend
 docker build -t farmsafe-backend .
 
-# Build frontend only
 cd FarmSafe/frontend
 docker build -t farmsafe-frontend .
 ```
@@ -182,11 +178,9 @@ The project includes a CI pipeline (`.github/workflows/ci.yml`) that:
 ### Running Tests Locally
 
 ```bash
-# Backend tests
 cd FarmSafe/backend
 npm test
 
-# Frontend tests (if configured)
 cd FarmSafe/frontend
 npm test
 ```
