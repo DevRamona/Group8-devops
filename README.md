@@ -33,54 +33,164 @@ The application features a modern, responsive interface with a clean design that
 
 - **Backend**: Node.js/Express with TypeScript
 - **Frontend**: React with TypeScript and Vite
-- **Database**: Sequelize ORM with mock data for development
-- **Other**: React Router for navigation, React Icons for UI elements, CORS for API communication
+- **Database**: MongoDB with Mongoose ODM
+- **Containerization**: Docker and Docker Compose
+- **CI/CD**: GitHub Actions
+- **Other**: React Router for navigation, React Icons for UI elements, CORS for API communication, Tailwind CSS for styling
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js 16+ and npm
+
+**For Local Development:**
+- Node.js 20+ and npm
+- MongoDB (local installation or MongoDB Atlas account)
 - Git
 
-### Installation
+**For Docker Deployment:**
+- Docker Desktop (or Docker Engine + Docker Compose)
+- Git
 
-1. Clone the repository
+## Getting Started
+
+### Option 1: Docker Compose (Recommended)
+
+The easiest way to run the entire application is using Docker Compose:
+
+1. **Clone the repository**
 ```bash
-   git clone [your-repo-url]
-   cd Group8-devops
+git clone [your-repo-url]
+cd Group8-devops/FarmSafe
 ```
 
-2. Install backend dependencies
+2. **Create environment file**
 ```bash
-   cd FarmSafe/backend
-   npm install
+
+echo "JWT_SECRET=your_secret_key_here" > .env
 ```
 
-3. Install frontend dependencies
+3. **Start all services with Docker Compose**
 ```bash
-   cd ../frontend
-   npm install
+docker-compose up -d
 ```
 
-4. Build and start the backend
+4. **Access the application**
+   - Frontend: http://localhost
+   - Backend API: http://localhost:5000
+   - MongoDB: localhost:27017
+
+5. **Stop services**
 ```bash
-   cd ../backend
-   npm run build
-   npm start
+docker-compose down
 ```
 
-5. Start the frontend (in a new terminal)
+6. **View logs**
 ```bash
-   cd ../frontend
-   npm run dev
+docker-compose logs -f
+```
+
+### Option 2: Local Development
+
+1. **Clone the repository**
+```bash
+git clone [your-repo-url]
+cd Group8-devops
+```
+
+2. **Set up MongoDB**
+   - Install MongoDB locally, or
+   - Use MongoDB Atlas (free tier available)
+   - Create a database named `farmsafe_db`
+
+3. **Configure backend environment**
+```bash
+cd FarmSafe/backend
+cp env.example .env
+```
+
+4. **Install backend dependencies**
+```bash
+cd FarmSafe/backend
+npm install
+```
+
+5. **Install frontend dependencies**
+```bash
+cd FarmSafe/frontend
+npm install
+```
+
+6. **Start the backend**
+```bash
+cd FarmSafe/backend
+npm run dev
+```
+
+7. **Start the frontend** (in a new terminal)
+```bash
+cd FarmSafe/frontend
+npm run dev
 ```
 
 ### Usage
 
-1. Open your browser and navigate to `http://localhost:5173`
-2. Browse the farmer list to see all registered farmers
-3. Click on any farmer card to view their detailed profile
-4. Use the sidebar navigation for different sections (Profile, Weather, Crop Prices)
+1. Open your browser and navigate to `http://localhost:5173` (local) or `http://localhost` (Docker)
+2. Register a new account or log in
+3. Browse the dashboard to see farmer information, weather, and crop data
+4. Use the sidebar navigation for different sections
+
+## Docker Configuration
+
+### Dockerfiles
+
+- **Backend Dockerfile** (`FarmSafe/Dockerfile`): Multi-stage build for the API (compiles TypeScript, runs as non-root)
+- **Frontend Dockerfile** (`FarmSafe/frontend/Dockerfile`): Multi-stage build with nginx for serving React app
+
+### Docker Compose
+
+The `docker-compose.yml` file orchestrates three services:
+- **mongodb**: MongoDB database with persistent volume
+- **backend**: Express API server
+- **frontend**: React application served via nginx
+
+### Building Individual Services
+
+```bash
+cd FarmSafe/backend
+docker build -t farmsafe-backend .
+
+cd FarmSafe/frontend
+docker build -t farmsafe-frontend .
+```
+
+## CI/CD Pipeline
+
+### GitHub Actions
+
+The project includes a CI pipeline (`.github/workflows/ci.yml`) that:
+- Triggers on pushes to any branch (except main) and pull requests to main
+- Runs linting checks for both backend and frontend
+- Executes TypeScript type checking
+- Runs tests (minimum 1 test required)
+- Builds Docker images to validate containerization
+- Validates docker-compose configuration
+
+### Running Tests Locally
+
+```bash
+cd FarmSafe/backend
+npm test
+
+cd FarmSafe/frontend
+npm test
+```
+
+### Branch Protection
+
+The `main` branch is protected and requires:
+- CI checks to pass before merging
+- Code review from team members
+- No direct pushes (must use pull requests)
 
 ## Project Structure
 
@@ -91,16 +201,29 @@ FarmSafe/
 │   │   ├── config/
 │   │   ├── models/
 │   │   ├── routes/
+│   │   ├── middleware/
+│   │   ├── __tests__/
 │   │   └── server.ts
-│   ├── dist/
-│   └── package.json
+│   ├── Dockerfile
+│   ├── .dockerignore
+│   ├── jest.config.js
+│   ├── package.json
+│   └── tsconfig.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   ├── pages/
+│   │   ├── context/
+│   │   ├── utils/
 │   │   └── App.tsx
-│   ├── public/
-│   └── package.json
+│   ├── Dockerfile
+│   ├── .dockerignore
+│   ├── package.json
+│   └── vite.config.ts
+├── docker-compose.yml
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 └── README.md
 ```
 

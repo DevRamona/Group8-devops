@@ -3,9 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import farmerRoutes from './routes/farmers';
-import authRoutes from './routes/auth';
-import { connectToDatabase } from './config/db';
+import farmerRoutes from './routes/farmers.js';
+import authRoutes from './routes/auth.js';
+import { connectToDatabase } from './config/db.js';
 
 dotenv.config();
 
