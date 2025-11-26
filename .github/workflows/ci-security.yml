@@ -11,3 +11,5 @@ jobs:
     steps:
       - name: Placeholder setup
         run: echo "CI pipeline updated - test change"
+      - name: FAILSAFE CHANGE
+        run: echo "This is a failsafe change to ensure the pipeline runs correctly."
