@@ -1,12 +1,13 @@
-name: DevSecOps Security Pipeline (to ensure a fail-safe)
+name: DevSecOps Security Pipeline - v2
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   placeholder:
     runs-on: ubuntu-latest
     steps:
       - name: Placeholder setup
-        run: echo "Setting up DevSecOps CI"
+        run: echo "CI pipeline updated - test change"
