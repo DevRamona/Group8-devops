@@ -1,0 +1,12 @@
+name: DevSecOps Security Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder setup
+        run: echo "Setting up DevSecOps CI"
