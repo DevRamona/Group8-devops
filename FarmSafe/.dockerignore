@@ -1,0 +1,27 @@
+# Node dependencies
+backend/node_modules
+frontend/node_modules
+
+# Build outputs
+backend/dist
+frontend/dist
+
+# Environment files
+.env
+.env.*
+backend/.env
+frontend/.env
+
+# Logs and coverage
+*.log
+coverage
+
+# Git and IDE clutter
+.git
+.gitignore
+.vscode
+.idea
+
+# Docker artifacts
+Dockerfile
+
