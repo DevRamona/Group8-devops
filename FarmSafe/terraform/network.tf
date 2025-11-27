@@ -38,16 +38,29 @@ resource "aws_iam_role" "vpc_flow" {
 }
 
 data "aws_iam_policy_document" "vpc_flow_permissions" {
+  // Statement for actions that only need the log group ARN (no wildcards)
   statement {
     effect = "Allow"
     actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
       "logs:DescribeLogGroups",
       "logs:DescribeLogStreams"
     ]
     resources = [
-      aws_cloudwatch_log_group.vpc_flow.arn,
+      aws_cloudwatch_log_group.vpc_flow.arn
+    ]
+  }
+
+  // Statement for actions that require log stream wildcard
+  // Note: VPC Flow Logs service creates log streams dynamically, so wildcard is required
+  // This is a necessary exception for VPC Flow Logs functionality
+  # tfsec:ignore:aws-iam-no-policy-wildcards
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = [
       "${aws_cloudwatch_log_group.vpc_flow.arn}:log-stream:*"
     ]
   }
