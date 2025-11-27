@@ -19,18 +19,19 @@ resource "aws_security_group" "bastion" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "Allow egress within VPC"
+    description = "SSH from allowed CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.vpc_idr]
+    cidr_blocks = [var.allowed_ssh_cidr]
   }
 
   egress {
+    description = "Allow egress within VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = merge(
@@ -71,10 +72,11 @@ resource "aws_security_group" "app" {
   }
 
   egress {
+    description = "Allow egress within VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = merge(
@@ -93,9 +95,15 @@ resource "aws_instance" "bastion" {
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.bastion.id]
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
   root_block_device {
     volume_size = var.bastion_root_volume_size
     volume_type = "gp3"
+    encrypted   = true
   }
 
   tags = merge(
@@ -111,10 +119,6 @@ resource "aws_eip" "bastion" {
   instance = aws_instance.bastion.id
   domain   = "vpc"
 
-  metadata_options {
-    http_endpoint = "enabled"
-    http_tokens   = "required"
-  }
   tags = merge(
     local.tags,
     {
@@ -131,9 +135,15 @@ resource "aws_instance" "app" {
   vpc_security_group_ids      = [aws_security_group.app.id]
   associate_public_ip_address = false
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
   root_block_device {
     volume_size = var.app_root_volume_size
     volume_type = "gp3"
+    encrypted   = true
   }
 
   tags = merge(

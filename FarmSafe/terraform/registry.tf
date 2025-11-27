@@ -1,9 +1,21 @@
+resource "aws_kms_key" "ecr" {
+  description             = "CMK for ECR images for ${local.project_name}"
+  deletion_window_in_days = 30
+
+  tags = local.tags
+}
+
 resource "aws_ecr_repository" "app" {
   name                 = lower("${local.project_name}-${local.environment}")
   image_tag_mutability = var.container_image_mutability
 
   image_scanning_configuration {
     scan_on_push = var.container_scan_on_push
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.ecr.arn
   }
 
   tags = merge(
