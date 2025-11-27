@@ -155,15 +155,27 @@ resource "aws_iam_role" "app_instance" {
 
 // Policy to allow ECR access
 data "aws_iam_policy_document" "app_instance_ecr" {
+  // GetAuthorizationToken must use "*" resource - this is an AWS requirement
+  # tfsec:ignore:aws-iam-no-policy-wildcards
   statement {
     effect = "Allow"
     actions = [
-      "ecr:GetAuthorizationToken",
+      "ecr:GetAuthorizationToken"
+    ]
+    resources = ["*"]
+  }
+
+  // Repository-specific actions scoped to our ECR repository
+  statement {
+    effect = "Allow"
+    actions = [
       "ecr:BatchCheckLayerAvailability",
       "ecr:GetDownloadUrlForLayer",
       "ecr:BatchGetImage"
     ]
-    resources = ["*"]
+    resources = [
+      aws_ecr_repository.app.arn
+    ]
   }
 }
 
