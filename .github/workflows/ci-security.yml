@@ -6,10 +6,19 @@ on:
       - main
 
 jobs:
-  placeholder:
+  security-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Placeholder setup
-        run: echo "CI pipeline updated - test change"
-      - name: FAILSAFE CHANGE
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Install Trivy
+        uses: aquasecurity/trivy-action@v0.8.0
+        with:
+          scan-type: config
+          format: table
+          output: trivy-report.txt
+
+
+    
+      - name: Run Trivy Security scan
         run: echo "This is a failsafe change to ensure the pipeline runs correctly."
