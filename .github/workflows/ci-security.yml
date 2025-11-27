@@ -27,12 +27,12 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
-          severity: HIGH, CRITICAL
+          severity: 'CRITICAL,HIGH'
           exit-code: 1
           format: sarif
           output: trivy-results.sarif
 
-        - name: Upload Trivy results to GitHub Security
+        - name:  Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()  # Upload even if previous step fails
         with:
