@@ -35,3 +35,26 @@ jobs:
           severity: CRITICAL
           exit-code: 1
           output: trivy-image.txt
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Debug Terraform directory
+        run: |
+          echo "Listing FarmSafe folder"
+          ls -la ./FarmSafe || true
+
+      - name: Run tfsec on IaC
+        uses: aquasecurity/tfsec-action@master
+        with:
+          path: ./FarmSafe
+          args: --soft-fail
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          exit-code: 1
+          format: table
+          output: trivy-fs.txt
