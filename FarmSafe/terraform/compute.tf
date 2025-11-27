@@ -19,7 +19,7 @@ resource "aws_security_group" "bastion" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH from trusted CIDR"
+    description = "SSH from allowed CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -27,10 +27,11 @@ resource "aws_security_group" "bastion" {
   }
 
   egress {
+    description = "Allow egress within VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = merge(
@@ -71,10 +72,11 @@ resource "aws_security_group" "app" {
   }
 
   egress {
+    description = "Allow egress within VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = merge(
@@ -93,9 +95,15 @@ resource "aws_instance" "bastion" {
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.bastion.id]
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
   root_block_device {
     volume_size = var.bastion_root_volume_size
     volume_type = "gp3"
+    encrypted   = true
   }
 
   tags = merge(
@@ -119,6 +127,76 @@ resource "aws_eip" "bastion" {
   )
 }
 
+// IAM role for app instance to access ECR
+data "aws_iam_policy_document" "app_instance_assume" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "app_instance" {
+  name               = "${local.project_name}-${local.environment}-app-instance-role"
+  assume_role_policy = data.aws_iam_policy_document.app_instance_assume.json
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-instance-role"
+    },
+  )
+}
+
+// Policy to allow ECR access
+data "aws_iam_policy_document" "app_instance_ecr" {
+  // GetAuthorizationToken must use "*" resource - this is an AWS requirement
+  # tfsec:ignore:aws-iam-no-policy-wildcards
+  statement {
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken"
+    ]
+    resources = ["*"]
+  }
+
+  // Repository-specific actions scoped to our ECR repository
+  statement {
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage"
+    ]
+    resources = [
+      aws_ecr_repository.app.arn
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "app_instance_ecr" {
+  name   = "${local.project_name}-${local.environment}-app-instance-ecr-policy"
+  role   = aws_iam_role.app_instance.id
+  policy = data.aws_iam_policy_document.app_instance_ecr.json
+}
+
+resource "aws_iam_instance_profile" "app_instance" {
+  name = "${local.project_name}-${local.environment}-app-instance-profile"
+  role = aws_iam_role.app_instance.name
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-instance-profile"
+    },
+  )
+}
+
 resource "aws_instance" "app" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.app_instance_type
@@ -126,10 +204,17 @@ resource "aws_instance" "app" {
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.app.id]
   associate_public_ip_address = false
+  iam_instance_profile        = aws_iam_instance_profile.app_instance.name
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
 
   root_block_device {
     volume_size = var.app_root_volume_size
     volume_type = "gp3"
+    encrypted   = true
   }
 
   tags = merge(

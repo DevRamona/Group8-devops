@@ -11,6 +11,75 @@ resource "aws_vpc" "main" {
   )
 }
 
+resource "aws_cloudwatch_log_group" "vpc_flow" {
+  name              = "/aws/vpc/${local.project_name}-${local.environment}"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.observability.arn
+
+  tags = local.tags
+}
+
+data "aws_iam_policy_document" "vpc_flow_assume" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["vpc-flow-logs.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "vpc_flow" {
+  name               = "${local.project_name}-${local.environment}-vpc-flow-role"
+  assume_role_policy = data.aws_iam_policy_document.vpc_flow_assume.json
+}
+
+data "aws_iam_policy_document" "vpc_flow_permissions" {
+  // Statement for actions that only need the log group ARN (no wildcards)
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams"
+    ]
+    resources = [
+      aws_cloudwatch_log_group.vpc_flow.arn
+    ]
+  }
+
+  // Statement for actions that require log stream wildcard
+  // Note: VPC Flow Logs service creates log streams dynamically, so wildcard is required
+  // This is a necessary exception for VPC Flow Logs functionality
+  # tfsec:ignore:aws-iam-no-policy-wildcards
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = [
+      "${aws_cloudwatch_log_group.vpc_flow.arn}:log-stream:*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "vpc_flow" {
+  name   = "${local.project_name}-${local.environment}-vpc-flow-policy"
+  role   = aws_iam_role.vpc_flow.id
+  policy = data.aws_iam_policy_document.vpc_flow_permissions.json
+}
+
+resource "aws_flow_log" "vpc" {
+  log_destination      = aws_cloudwatch_log_group.vpc_flow.arn
+  iam_role_arn         = aws_iam_role.vpc_flow.arn
+  traffic_type         = "ALL"
+  vpc_id               = aws_vpc.main.id
+  log_destination_type = "cloud-watch-logs"
+}
+
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
