@@ -10,11 +10,11 @@ private_subnet_cidrs = [
   "10.0.101.0/24",
   "10.0.102.0/24",
 ]
-allowed_ssh_cidr = "129.222.149.172/32"
+allowed_ssh_cidr           = "129.222.149.172/32"
 key_name                   = "farmsafe-key-3"
 bastion_instance_type      = "t3.micro"
 app_instance_type          = "t3.small"
-bastion_root_volume_size   =30
+bastion_root_volume_size   = 30
 app_root_volume_size       = 40
 db_username                = "farmsafe_admin"
 db_password                = "7ZznUA7J0xDevVJ0Ix8QqFjjPoaQ53SCC8ZUmicww8="

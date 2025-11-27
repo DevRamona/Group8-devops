@@ -20,7 +20,7 @@ resource "aws_security_group" "db" {
     to_port         = var.db_port
     protocol        = "tcp"
     security_groups = [aws_security_group.app.id]
-    description     = "DB access from app servers"
+    description     = "Allow egress within VPC"
   }
 
   egress {
@@ -39,21 +39,21 @@ resource "aws_security_group" "db" {
 }
 
 resource "aws_db_instance" "main" {
-  identifier              = "${local.project_name}-${local.environment}-db"
-  engine                  = "postgres"
-  instance_class          = var.db_instance_class
-  username                = var.db_username
-  password                = var.db_password
-  db_name                 = var.db_name
-  port                    = var.db_port
-  allocated_storage       = var.db_allocated_storage
-  max_allocated_storage   = var.db_allocated_storage * 2
-  multi_az                = var.db_multi_az
-  storage_encrypted       = true
-  publicly_accessible     = false
-  skip_final_snapshot     = true
-  deletion_protection     = false
-  backup_retention_period = var.db_backup_retention
+  identifier                 = "${local.project_name}-${local.environment}-db"
+  engine                     = "postgres"
+  instance_class             = var.db_instance_class
+  username                   = var.db_username
+  password                   = var.db_password
+  db_name                    = var.db_name
+  port                       = var.db_port
+  allocated_storage          = var.db_allocated_storage
+  max_allocated_storage      = var.db_allocated_storage * 2
+  multi_az                   = var.db_multi_az
+  storage_encrypted          = true
+  publicly_accessible        = false
+  skip_final_snapshot        = true
+  deletion_protection        = false
+  backup_retention_period    = var.db_backup_retention
   auto_minor_version_upgrade = true
 
   db_subnet_group_name   = aws_db_subnet_group.main.name

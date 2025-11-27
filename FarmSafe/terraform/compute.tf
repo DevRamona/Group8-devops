@@ -19,11 +19,11 @@ resource "aws_security_group" "bastion" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH from trusted CIDR"
+    description = "Allow egress within VPC"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_cidr]
+    cidr_blocks = [var.vpc_idr]
   }
 
   egress {
@@ -111,6 +111,10 @@ resource "aws_eip" "bastion" {
   instance = aws_instance.bastion.id
   domain   = "vpc"
 
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
   tags = merge(
     local.tags,
     {
