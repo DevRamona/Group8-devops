@@ -54,7 +54,7 @@ const Dashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6">
         {/* Sidebar */}
         <aside className={`${open ? 'block' : 'hidden'} md:block bg-[#1f1f1f] text-white rounded-2xl p-4 md:p-5 h-max`}> 
-          <div className="font-bold text-lg mb-4">agri<span className="text-emerald-400">🌿</span>cultur</div>
+          <div className="font-bold text-lg mb-4">agri<span className="text-emerald-400">🌿</span>culture</div>
           <nav className="space-y-1">
             {['Dashboard','Analytics','Fields','Harvesting','Finances','Weather','Settings'].map((item,i)=> (
               <a key={item} className={`block px-3 py-2 rounded-lg ${i===0? 'bg-[#dff0a6] text-black' : 'hover:bg-white/10'}`} href="#">{item}</a>
