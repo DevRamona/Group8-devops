@@ -28,7 +28,7 @@ jobs:
         run: docker build -t app:test.
 
       - name: Trivy Image Scan
-        uses: aquasecurity/trivy-action@v0.8.0
+        uses: aquasecurity/trivy-action@v0.20.1
         with:
           image-ref: app:test
           format: table
