@@ -16,7 +16,7 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.0
 
       - name: Trivy FS Scan (source code)
-        uses: aquasecurity/trivy-action@v0.8.0
+        uses: aquasecurity/trivy-action@v0.20.1
         with:
           scan-type: fs
           format: table
@@ -25,7 +25,7 @@ jobs:
           output: trivy-fs.txt
 
       - name: Build Docker Image
-        run: docker build -t app:test .
+        run: docker build -t app:test.
 
       - name: Trivy Image Scan
         uses: aquasecurity/trivy-action@v0.8.0
