@@ -19,14 +19,37 @@ jobs:
       - name: Run tfsec on IaC
         uses: aquasecurity/tfsec-action@master
         with:
-          path: ./FarmSafe
-          args: --soft-fail
+          path: Group8-devops/FarmSafe
+
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
+          severity: HIGH, CRITICAL
           exit-code: 1
+          format: sarif
+          output: trivy-results.sarif
+
+        - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()  # Upload even if previous step fails
+        with:
+          sarif_file: trivy-results.sarif
+
+      # Generate readable report (always runs)
+      - name: Generate Trivy report
+        uses: aquasecurity/trivy-action@master
+        if: always()
+        with:
+          scan-type: fs
           format: table
-          output: trivy-fs.txt
+          output: trivy-report.txt
+
+      - name: Upload Trivy report as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: trivy-report.txt 
