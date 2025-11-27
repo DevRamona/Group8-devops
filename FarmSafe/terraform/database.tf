@@ -58,6 +58,7 @@ resource "aws_db_instance" "main" {
   auto_minor_version_upgrade          = true
   iam_database_authentication_enabled = true
   performance_insights_enabled        = true
+  performance_insights_kms_key_id     = aws_kms_key.observability.arn
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.db.id]
@@ -68,4 +69,12 @@ resource "aws_db_instance" "main" {
       Name = "${local.project_name}-${local.environment}-db"
     },
   )
+}
+
+resource "aws_kms_key" "observability" {
+  description             = "CMK for RDS performance insights and logs"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = local.tags
 }

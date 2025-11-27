@@ -1,6 +1,7 @@
 resource "aws_kms_key" "ecr" {
   description             = "CMK for ECR images for ${local.project_name}"
   deletion_window_in_days = 30
+  enable_key_rotation     = true
 
   tags = local.tags
 }

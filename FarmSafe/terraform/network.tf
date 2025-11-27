@@ -14,6 +14,7 @@ resource "aws_vpc" "main" {
 resource "aws_cloudwatch_log_group" "vpc_flow" {
   name              = "/aws/vpc/${local.project_name}-${local.environment}"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.observability.arn
 
   tags = local.tags
 }
@@ -47,7 +48,7 @@ data "aws_iam_policy_document" "vpc_flow_permissions" {
     ]
     resources = [
       aws_cloudwatch_log_group.vpc_flow.arn,
-      "${aws_cloudwatch_log_group.vpc_flow.arn}:*"
+      "${aws_cloudwatch_log_group.vpc_flow.arn}:log-stream:*"
     ]
   }
 }
