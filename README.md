@@ -10,11 +10,11 @@ FarmSafe addresses critical challenges faced by smallholder farmers in Rwanda, w
 
 - Nana Koramah Abeasi - Frontend developer
 - Ramona Ingabire - DevOps engineer
-- Munayani Cecilia Banda - Backend developer
+- Cecilia Munayani Banda - Backend developer/ DevSecOps Tasks
 
 ## Project Overview
 
-FarmSafe is a comprehensive web application designed to support Rwandan farmers by providing essential agricultural information and management tools. The platform serves as a centralized hub where farmers can access personalized profiles, track seasonal weather patterns specific to their regions, monitor crop prices, and manage their farming operations more effectively.
+FarmSafe is a comprehensive web application designed to support Rwandan farmers by providing essential agricultural information and management tools. The platform serves as a centralized hub where farmers can access personalized profiles, track seasonal weather patterns specific to their regions, monitor crop prices, and manage their farming operations more effectively and efficiently.
 
 The application features a modern, responsive interface with a clean design that prioritizes usability for farmers who may have varying levels of digital literacy. By focusing on Rwanda's agricultural context, FarmSafe incorporates local crop varieties, regional weather patterns, and market dynamics specific to East African farming communities.
 
