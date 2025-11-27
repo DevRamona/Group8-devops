@@ -25,7 +25,7 @@ jobs:
           output: trivy-fs.txt
 
       - name: Build Docker Image
-        run: docker build -t app:test.
+        run: docker build -f FarmSafe/Dockerfile -t app:test FarmSafe
 
       - name: Trivy Image Scan
         uses: aquasecurity/trivy-action@master
