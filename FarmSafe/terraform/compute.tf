@@ -127,6 +127,64 @@ resource "aws_eip" "bastion" {
   )
 }
 
+// IAM role for app instance to access ECR
+data "aws_iam_policy_document" "app_instance_assume" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "app_instance" {
+  name               = "${local.project_name}-${local.environment}-app-instance-role"
+  assume_role_policy = data.aws_iam_policy_document.app_instance_assume.json
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-instance-role"
+    },
+  )
+}
+
+// Policy to allow ECR access
+data "aws_iam_policy_document" "app_instance_ecr" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "app_instance_ecr" {
+  name   = "${local.project_name}-${local.environment}-app-instance-ecr-policy"
+  role   = aws_iam_role.app_instance.id
+  policy = data.aws_iam_policy_document.app_instance_ecr.json
+}
+
+resource "aws_iam_instance_profile" "app_instance" {
+  name = "${local.project_name}-${local.environment}-app-instance-profile"
+  role = aws_iam_role.app_instance.name
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-instance-profile"
+    },
+  )
+}
+
 resource "aws_instance" "app" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.app_instance_type
@@ -134,6 +192,7 @@ resource "aws_instance" "app" {
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.app.id]
   associate_public_ip_address = false
+  iam_instance_profile        = aws_iam_instance_profile.app_instance.name
 
   metadata_options {
     http_endpoint = "enabled"

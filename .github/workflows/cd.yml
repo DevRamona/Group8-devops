@@ -169,6 +169,6 @@ EOF
           ansible-playbook \
             -i inventory.ini \
             --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }}" \
-            ansible/playbook.yml
+            FarmSafe/ansible/playbook.yml
 
 
