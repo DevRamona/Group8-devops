@@ -6,35 +6,18 @@
     docker_image: "{{ docker_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
   tasks:
-    - name: Update apt package index
-      apt:
+    # Amazon Linux 2023 uses dnf as package manager
+    - name: Update package index (dnf)
+      dnf:
         update_cache: yes
 
-    - name: Install required packages
-      apt:
+    - name: Install required packages (dnf)
+      dnf:
         name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
+          - docker
           - python3-pip
+          - curl
           - unzip
-        state: present
-
-    - name: Add Docker GPG key
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
-
-    - name: Add Docker repository
-      apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
-        state: present
-
-    - name: Install Docker
-      apt:
-        name: docker-ce
         state: present
 
     - name: Install Docker Compose
