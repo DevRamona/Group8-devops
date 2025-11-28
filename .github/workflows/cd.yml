@@ -160,6 +160,12 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           echo "app ansible_host=${{ secrets.ANSIBLE_HOST }} ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > inventory.ini
 
+      - name: Debug inventory
+        run: |
+          echo "===== inventory.ini contents ====="
+          cat inventory.ini
+          echo "================================="
+
       - name: Run Ansible playbook
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
