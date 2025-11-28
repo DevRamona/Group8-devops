@@ -19,9 +19,9 @@
           - unzip
         state: present
 
-    - name: Install Docker Compose
-      pip:
-        name: docker-compose
+    - name: Install Docker Compose plugin (dnf)
+      dnf:
+        name: docker-compose-plugin
         state: present
 
     - name: Start and enable Docker service
@@ -82,7 +82,7 @@
                 retries: 5
 
             backend:
-              image: {{ docker_image }}
+              image: "{{ docker_image }}"
               container_name: farmsafe-backend
               restart: unless-stopped
               environment:
@@ -119,7 +119,12 @@
 
     - name: Stop existing containers
       when: docker_image != ""
-      shell: docker-compose down
+      shell: |
+        if command -v docker-compose &> /dev/null; then
+          docker-compose down
+        else
+          docker compose down
+        fi
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -129,7 +134,12 @@
 
     - name: Start services with docker-compose
       when: docker_image != ""
-      shell: docker-compose up -d
+      shell: |
+        if command -v docker-compose &> /dev/null; then
+          docker-compose up -d
+        else
+          docker compose up -d
+        fi
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -138,7 +148,12 @@
 
     - name: Verify services are running
       when: docker_image != ""
-      shell: docker-compose ps
+      shell: |
+        if command -v docker-compose &> /dev/null; then
+          docker-compose ps
+        else
+          docker compose ps
+        fi
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
