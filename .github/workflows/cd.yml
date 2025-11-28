@@ -13,7 +13,7 @@ env:
   NODE_VERSION: 20
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'farmsafe-dev' }}
-  DOCKER_CONTEXT: FarmSafe
+  APP_DOCKER_CONTEXT: FarmSafe
   DOCKERFILE_PATH: FarmSafe/Dockerfile
 
 jobs:
@@ -95,7 +95,7 @@ jobs:
           docker build \
             -f $DOCKERFILE_PATH \
             -t farmsafe-sec-scan:${{ github.sha }} \
-            $DOCKER_CONTEXT
+            $APP_DOCKER_CONTEXT
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@master
@@ -138,7 +138,7 @@ jobs:
           docker build \
             -f $DOCKERFILE_PATH \
             -t $IMAGE_URI \
-            $DOCKER_CONTEXT
+            $APP_DOCKER_CONTEXT
 
           docker tag $IMAGE_URI $LATEST_URI
           docker push $IMAGE_URI
