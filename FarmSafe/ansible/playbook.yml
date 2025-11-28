@@ -16,7 +16,6 @@
         name:
           - docker
           - python3-pip
-          - curl
           - unzip
         state: present
 
