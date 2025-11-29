@@ -1,4 +1,3 @@
----
 - hosts: all
   become: yes
   vars:
@@ -7,7 +6,6 @@
     aws_region: "{{ aws_region | default('us-east-1') }}"
     ecr_token: "{{ ecr_token | default('') }}"
   tasks:
-    # Amazon Linux 2023 uses dnf as package manager
     - name: Update package index (dnf)
       dnf:
         update_cache: yes
@@ -57,6 +55,9 @@
       when: docker_registry != "" and ecr_token != ""
       shell: |
         echo "{{ ecr_token }}" | docker login --username AWS --password-stdin {{ docker_registry }}
+      become_user: "{{ ansible_user }}"
+      environment:
+        HOME: "/home/{{ ansible_user }}"
       register: ecr_login_token
       changed_when: false
       no_log: true
@@ -65,8 +66,10 @@
       when: docker_registry != "" and ecr_token == ""
       shell: |
         aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ docker_registry }}
+      become_user: "{{ ansible_user }}"
       environment:
         AWS_DEFAULT_REGION: "{{ aws_region }}"
+        HOME: "/home/{{ ansible_user }}"
       register: ecr_login_iam
       changed_when: false
       failed_when: ecr_login_iam.rc != 0
