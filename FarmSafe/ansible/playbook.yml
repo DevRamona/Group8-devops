@@ -5,6 +5,7 @@
     docker_registry: "{{ docker_registry | default('') }}"
     docker_image: "{{ docker_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
+    ecr_token: "{{ ecr_token | default('') }}"
   tasks:
     # Amazon Linux 2023 uses dnf as package manager
     - name: Update package index (dnf)
@@ -52,12 +53,23 @@
       args:
         creates: /usr/local/bin/aws
 
-    - name: Configure AWS credentials for ECR login
-      when: docker_registry != ""
+    - name: Configure ECR login using provided token
+      when: docker_registry != "" and ecr_token != ""
+      shell: |
+        echo "{{ ecr_token }}" | docker login --username AWS --password-stdin {{ docker_registry }}
+      register: ecr_login_token
+      changed_when: false
+      no_log: true
+
+    - name: Configure ECR login using IAM role (fallback)
+      when: docker_registry != "" and ecr_token == ""
       shell: |
         aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ docker_registry }}
-      register: ecr_login
+      environment:
+        AWS_DEFAULT_REGION: "{{ aws_region }}"
+      register: ecr_login_iam
       changed_when: false
+      failed_when: ecr_login_iam.rc != 0
 
     - name: Create application directory
       file:
@@ -89,7 +101,7 @@
                 retries: 5
 
             backend:
-              image: "{{ docker_image }}"
+              image: "{{ docker_image | quote }}"
               container_name: farmsafe-backend
               restart: unless-stopped
               environment:
@@ -119,10 +131,13 @@
 
     - name: Pull latest Docker image
       when: docker_image != ""
-      shell: docker pull {{ docker_image }}
+      shell: docker pull {{ docker_image | quote }}
       become_user: "{{ ansible_user }}"
       environment:
         HOME: "/home/{{ ansible_user }}"
+      register: docker_pull
+      retries: 3
+      delay: 5
 
     - name: Stop existing containers
       when: docker_image != ""
