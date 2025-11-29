@@ -166,13 +166,22 @@ jobs:
           cat inventory.ini
           echo "================================="
 
+      - name: Get ECR login token
+        id: ecr-token
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          ECR_TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+          echo "token=$ECR_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
+
       - name: Run Ansible playbook
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           ansible-playbook \
             -i inventory.ini \
-            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }}" \
+            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }}" \
             FarmSafe/ansible/playbook.yml
 
 
