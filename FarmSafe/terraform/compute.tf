@@ -56,11 +56,11 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "HTTP from VPC"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    description     = "HTTP from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   ingress {
@@ -83,6 +83,43 @@ resource "aws_security_group" "app" {
     local.tags,
     {
       Name = "${local.project_name}-${local.environment}-app-sg"
+    },
+  )
+}
+
+resource "aws_security_group" "alb" {
+  name        = "${local.project_name}-${local.environment}-alb-sg"
+  description = "Allow HTTP and HTTPS from anywhere"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow egress to app instances"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-alb-sg"
     },
   )
 }
@@ -224,5 +261,65 @@ resource "aws_instance" "app" {
       Role = "application"
     },
   )
+}
+
+resource "aws_lb_target_group" "app" {
+  name     = "${local.project_name}-${local.environment}-app-tg"
+  port     = 5000
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-tg"
+    },
+  )
+}
+
+resource "aws_lb_target_group_attachment" "app" {
+  target_group_arn = aws_lb_target_group.app.arn
+  target_id        = aws_instance.app.id
+  port             = 5000
+}
+
+resource "aws_lb" "app" {
+  name               = "${local.project_name}-${local.environment}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = [for subnet in aws_subnet.public : subnet.id]
+
+  enable_deletion_protection = false
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-alb"
+    },
+  )
+}
+
+resource "aws_lb_listener" "app" {
+  load_balancer_arn = aws_lb.app.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
 }
 
