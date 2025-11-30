@@ -47,12 +47,13 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = ["102.22.143.250/32"]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    # FIX: Bastion needs to talk OUT to the internet (0.0.0.0/0) for updates and services.
+    # Bastion needs to talk OUT to the internet (0.0.0.0/0) for updates and services.
     cidr_blocks = ["0.0.0.0/0"] 
   }
 
@@ -101,12 +102,13 @@ resource "aws_security_group" "app" {
     security_groups = [aws_security_group.bastion.id]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    # FIX: Application needs to talk OUT to the internet (0.0.0.0/0) for ECR, S3, etc.
+    # Application needs to talk OUT to the internet (0.0.0.0/0) for ECR, S3, etc.
     cidr_blocks = ["0.0.0.0/0"] 
   }
 
