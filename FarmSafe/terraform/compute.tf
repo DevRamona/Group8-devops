@@ -15,7 +15,7 @@ data "aws_ami" "amazon_linux" {
 
 resource "aws_security_group" "bastion" {
   name        = "${local.project_name}-${local.environment}-bastion-sg"
-  description = "Allow SSH access to bastion host"
+  description = "Allow SSH and HTTP access to bastion host"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -24,6 +24,14 @@ resource "aws_security_group" "bastion" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = [var.allowed_ssh_cidr]
+  }
+
+  ingress {
+    description = "HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -140,6 +148,12 @@ resource "aws_instance" "bastion" {
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.bastion.id]
 
+  user_data = base64encode(templatefile("${path.module}/../ansible/user-data.sh", {
+    aws_region      = var.aws_region
+    docker_registry = data.aws_ecr_repository.app.repository_url
+    docker_image    = "${data.aws_ecr_repository.app.repository_url}:latest"
+  }))
+
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
@@ -218,7 +232,7 @@ data "aws_iam_policy_document" "app_instance_ecr" {
       "ecr:BatchGetImage"
     ]
     resources = [
-      "arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev"
+      data.aws_ecr_repository.app.arn
     ]
   }
 }
@@ -250,7 +264,11 @@ resource "aws_instance" "app" {
   associate_public_ip_address = true  # Temporarily public for testing
   iam_instance_profile        = aws_iam_instance_profile.app_instance.name
 
-  user_data = base64encode(file("${path.module}/../ansible/user-data-simple.sh"))
+  user_data = base64encode(templatefile("${path.module}/../ansible/user-data.sh", {
+    aws_region      = var.aws_region
+    docker_registry = data.aws_ecr_repository.app.repository_url
+    docker_image    = "${data.aws_ecr_repository.app.repository_url}:latest"
+  }))
 
   metadata_options {
     http_endpoint = "enabled"
@@ -284,7 +302,7 @@ resource "aws_lb_target_group" "app" {
     healthy_threshold   = 2
     interval            = 30
     matcher             = "200"
-    path                = "/"
+    path                = "/health"
     port                = "traffic-port"
     protocol            = "HTTP"
     timeout             = 5

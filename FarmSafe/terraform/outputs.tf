@@ -39,3 +39,8 @@ output "alb_dns_name" {
   value       = aws_lb.app.dns_name
 }
 
+
+output "app_public_ip" {
+  description = "Public IP of the application instance."
+  value       = aws_instance.app.public_ip
+}

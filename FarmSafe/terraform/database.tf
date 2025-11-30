@@ -53,7 +53,7 @@ resource "aws_db_instance" "main" {
   storage_encrypted                   = true
   publicly_accessible                 = false
   skip_final_snapshot                 = true
-  deletion_protection                 = true
+  deletion_protection                 = false
   backup_retention_period             = var.db_backup_retention
   auto_minor_version_upgrade          = true
   iam_database_authentication_enabled = true

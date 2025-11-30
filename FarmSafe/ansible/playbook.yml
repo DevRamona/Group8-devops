@@ -62,7 +62,7 @@
         mode: '0755'
 
     - name: Create production docker-compose file
-      when: docker_image != ""
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
       copy:
         content: |
           services:
@@ -112,20 +112,15 @@
         mode: '0644'
 
     - name: Pull latest Docker image
-      when: docker_image != ""
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
       shell: docker pull {{ docker_image }}
       become_user: "{{ ansible_user }}"
       environment:
         HOME: "/home/{{ ansible_user }}"
 
     - name: Stop existing containers
-      when: docker_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose down
-        else
-          docker compose down
-        fi
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
+      shell: docker compose down
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -133,14 +128,9 @@
         HOME: "/home/{{ ansible_user }}"
       ignore_errors: yes
 
-    - name: Start services with docker-compose
-      when: docker_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose up -d
-        else
-          docker compose up -d
-        fi
+    - name: Start services with docker compose
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
+      shell: docker compose up -d
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -148,13 +138,8 @@
         HOME: "/home/{{ ansible_user }}"
 
     - name: Verify services are running
-      when: docker_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose ps
-        else
-          docker compose ps
-        fi
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
+      shell: docker compose ps
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -163,12 +148,12 @@
       register: compose_status
 
     - name: Display service status
-      when: docker_image != ""
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
       debug:
         msg: "{{ compose_status.stdout_lines }}"
 
-    - name: Configure nginx reverse proxy
-      when: docker_image != ""
+    - name: Configure nginx reverse proxy for app instance
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
       copy:
         content: |
           server {
@@ -184,6 +169,34 @@
               }
 
               # Health check endpoint for ALB
+              location /health {
+                  access_log off;
+                  return 200 "healthy\n";
+                  add_header Content-Type text/plain;
+              }
+          }
+        dest: /etc/nginx/conf.d/farmsafe.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configure nginx reverse proxy for bastion
+      when: docker_image != "" and inventory_hostname in groups['farmsafe_bastion']
+      copy:
+        content: |
+          server {
+              listen 80;
+              server_name _;
+
+              location / {
+                  proxy_pass http://10.0.1.53;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+
+              # Health check endpoint
               location /health {
                   access_log off;
                   return 200 "healthy\n";

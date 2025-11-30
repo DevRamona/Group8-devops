@@ -18,6 +18,11 @@ const PORT = process.env.PORT || 5000;
 // Serve static files from pictures directory using absolute path
 const picturesDir = path.resolve(__dirname, 'pictures');
 app.use('/pictures', express.static(picturesDir));
+
+// Serve static files from frontend dist directory
+const frontendDir = path.resolve(__dirname, '../../frontend/dist');
+app.use(express.static(frontendDir));
+
 app.use(cors());
 app.use(express.json());
 
@@ -33,13 +38,20 @@ app.use('/api/farmers', farmerRoutes);
 app.use('/api/auth', authRoutes);
 
 
+// Serve index.html for all non-API routes (SPA fallback)
 app.get('/', (req: express.Request, res: express.Response) => {
-  res.json({ message: 'FarmSafe API is running' });
+  res.sendFile(path.join(frontendDir, 'index.html'));
 });
 
-// 404 handler for unknown routes
+// 404 handler for unknown routes - serve index.html for SPA
 app.use((req: express.Request, res: express.Response) => {
-  res.status(404).json({ error: 'Not Found' });
+  // For API routes, return 404 JSON
+  if (req.path.startsWith('/api')) {
+    res.status(404).json({ error: 'Not Found' });
+  } else {
+    // For other routes, serve the SPA
+    res.sendFile(path.join(frontendDir, 'index.html'));
+  }
 });
 
 // Centralized error handler

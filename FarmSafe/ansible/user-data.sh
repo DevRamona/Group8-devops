@@ -19,7 +19,7 @@ unzip -q awscliv2.zip
 rm -rf aws awscliv2.zip
 
 # Configure AWS credentials for ECR login
-aws ecr get-login-password --region ${aws_region} | docker login --username AWS --password-stdin ${docker_registry}
+aws ecr get-login-password --region $${aws_region} | docker login --username AWS --password-stdin $${docker_registry%/*}
 
 # Create application directory
 mkdir -p /opt/farmsafe
@@ -44,7 +44,7 @@ services:
       retries: 5
 
   backend:
-    image: ${docker_image}
+    image: $${docker_image}
     container_name: farmsafe-backend
     restart: unless-stopped
     environment:
@@ -70,7 +70,7 @@ volumes:
 EOF
 
 # Pull Docker image
-docker pull ${docker_image}
+docker pull $${docker_image}
 
 # Start services
 cd /opt/farmsafe
