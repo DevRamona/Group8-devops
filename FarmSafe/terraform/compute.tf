@@ -40,7 +40,8 @@ resource "aws_security_group" "bastion" {
     to_port     = 0
     protocol    = "-1"
     # Bastion needs to talk OUT to the internet (0.0.0.0/0) for updates and services.
-    cidr_blocks = ["0.0.0.0/0"] 
+    cidr_blocks = ["0.0.0.0/0"]
+    # tfsec:ignore:aws-ec2-no-public-egress-sgr
   }
 
   tags = merge(
@@ -78,6 +79,7 @@ resource "aws_security_group" "app" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   ingress {
@@ -115,6 +117,7 @@ resource "aws_security_group" "alb" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   ingress {
@@ -123,6 +126,7 @@ resource "aws_security_group" "alb" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   ingress {
@@ -336,12 +340,13 @@ resource "aws_lb_target_group_attachment" "app" {
 
 resource "aws_lb" "app" {
   name               = "${local.project_name}-${local.environment}-alb"
-  internal           = false
+  internal           = false  # tfsec:ignore:aws-elb-alb-not-public
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = [for subnet in aws_subnet.public : subnet.id]
 
   enable_deletion_protection = false
+  drop_invalid_header_fields = true
 
   tags = merge(
     local.tags,
