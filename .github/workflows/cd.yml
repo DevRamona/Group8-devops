@@ -240,7 +240,7 @@ jobs:
           echo "bastion ansible_host=bastion ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -F $SSH_CONFIG_PATH'" > bastion-inventory.ini
 
       - name: Configure nginx on bastion
-        if: steps.app-private-ip-for-ssh.outputs.app_private_ip != ''
+        if: steps.app-ip.outputs.app_private_ip != ''
         run: |
           ansible-playbook \
             -i bastion-inventory.ini \
