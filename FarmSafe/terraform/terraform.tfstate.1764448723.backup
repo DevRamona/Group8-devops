@@ -1,7 +1,7 @@
 {
   "version": 4,
   "terraform_version": "1.14.0",
-  "serial": 146,
+  "serial": 80,
   "lineage": "bb9b2462-4a4f-4185-ff60-89fbc5771b7c",
   "outputs": {
     "alb_dns_name": {
@@ -9,7 +9,7 @@
       "type": "string"
     },
     "app_private_ip": {
-      "value": "10.0.1.53",
+      "value": "10.0.101.57",
       "type": "string"
     },
     "bastion_public_ip": {
@@ -233,64 +233,6 @@
     {
       "mode": "data",
       "type": "aws_iam_policy_document",
-      "name": "app_instance_ecr",
-      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
-      "instances": [
-        {
-          "schema_version": 0,
-          "attributes": {
-            "id": "2206917464",
-            "json": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": \"ecr:GetAuthorizationToken\",\n      \"Resource\": \"*\"\n    },\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"ecr:GetDownloadUrlForLayer\",\n        \"ecr:BatchGetImage\",\n        \"ecr:BatchCheckLayerAvailability\"\n      ],\n      \"Resource\": \"arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev\"\n    }\n  ]\n}",
-            "minified_json": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ecr:GetAuthorizationToken\",\"Resource\":\"*\"},{\"Effect\":\"Allow\",\"Action\":[\"ecr:GetDownloadUrlForLayer\",\"ecr:BatchGetImage\",\"ecr:BatchCheckLayerAvailability\"],\"Resource\":\"arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev\"}]}",
-            "override_json": null,
-            "override_policy_documents": null,
-            "policy_id": null,
-            "source_json": null,
-            "source_policy_documents": null,
-            "statement": [
-              {
-                "actions": [
-                  "ecr:GetAuthorizationToken"
-                ],
-                "condition": [],
-                "effect": "Allow",
-                "not_actions": [],
-                "not_principals": [],
-                "not_resources": [],
-                "principals": [],
-                "resources": [
-                  "*"
-                ],
-                "sid": ""
-              },
-              {
-                "actions": [
-                  "ecr:BatchCheckLayerAvailability",
-                  "ecr:BatchGetImage",
-                  "ecr:GetDownloadUrlForLayer"
-                ],
-                "condition": [],
-                "effect": "Allow",
-                "not_actions": [],
-                "not_principals": [],
-                "not_resources": [],
-                "principals": [],
-                "resources": [
-                  "arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev"
-                ],
-                "sid": ""
-              }
-            ],
-            "version": "2012-10-17"
-          },
-          "sensitive_attributes": [],
-          "identity_schema_version": 0
-        }
-      ]
-    },
-    {
-      "mode": "data",
-      "type": "aws_iam_policy_document",
       "name": "vpc_flow_assume",
       "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
       "instances": [
@@ -480,7 +422,7 @@
             "instance_class": "db.t3.micro",
             "iops": 0,
             "kms_key_id": "arn:aws:kms:us-east-1:083971419301:key/0915bd9f-39b4-4111-accd-83e14b33b87c",
-            "latest_restorable_time": "2025-11-30T07:44:32Z",
+            "latest_restorable_time": "2025-11-29T20:24:32Z",
             "license_model": "postgresql-license",
             "listener_endpoint": [],
             "maintenance_window": "sat:10:27-sat:10:57",
@@ -611,6 +553,58 @@
             "aws_subnet.private",
             "aws_vpc.main",
             "data.aws_availability_zones.available"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_ecr_repository",
+      "name": "app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "arn": "arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev",
+            "encryption_configuration": [
+              {
+                "encryption_type": "AES256",
+                "kms_key": ""
+              }
+            ],
+            "force_delete": null,
+            "id": "farmsafe-dev",
+            "image_scanning_configuration": [
+              {
+                "scan_on_push": true
+              }
+            ],
+            "image_tag_mutability": "MUTABLE",
+            "name": "farmsafe-dev",
+            "registry_id": "083971419301",
+            "repository_url": "083971419301.dkr.ecr.us-east-1.amazonaws.com/farmsafe-dev",
+            "tags": {
+              "Environment": "dev",
+              "ManagedBy": "Terraform",
+              "Name": "farmsafe-dev-ecr",
+              "Owner": "devops-team",
+              "Project": "farmsafe"
+            },
+            "tags_all": {
+              "Environment": "dev",
+              "ManagedBy": "Terraform",
+              "Name": "farmsafe-dev-ecr",
+              "Owner": "devops-team",
+              "Project": "farmsafe"
+            },
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiZGVsZXRlIjoxMjAwMDAwMDAwMDAwfX0=",
+          "dependencies": [
+            "aws_kms_key.ecr"
           ]
         }
       ]
@@ -824,12 +818,7 @@
             "description": "",
             "force_detach_policies": false,
             "id": "farmsafe-dev-app-instance-role",
-            "inline_policy": [
-              {
-                "name": "farmsafe-dev-app-instance-ecr-policy",
-                "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":\"ecr:GetAuthorizationToken\",\"Effect\":\"Allow\",\"Resource\":\"*\"},{\"Action\":[\"ecr:GetDownloadUrlForLayer\",\"ecr:BatchGetImage\",\"ecr:BatchCheckLayerAvailability\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev\"}]}"
-              }
-            ],
+            "inline_policy": [],
             "managed_policy_arns": [],
             "max_session_duration": 3600,
             "name": "farmsafe-dev-app-instance-role",
@@ -904,32 +893,6 @@
     {
       "mode": "managed",
       "type": "aws_iam_role_policy",
-      "name": "app_instance_ecr",
-      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
-      "instances": [
-        {
-          "schema_version": 0,
-          "attributes": {
-            "id": "farmsafe-dev-app-instance-role:farmsafe-dev-app-instance-ecr-policy",
-            "name": "farmsafe-dev-app-instance-ecr-policy",
-            "name_prefix": "",
-            "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":\"ecr:GetAuthorizationToken\",\"Effect\":\"Allow\",\"Resource\":\"*\"},{\"Action\":[\"ecr:GetDownloadUrlForLayer\",\"ecr:BatchGetImage\",\"ecr:BatchCheckLayerAvailability\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev\"}]}",
-            "role": "farmsafe-dev-app-instance-role"
-          },
-          "sensitive_attributes": [],
-          "identity_schema_version": 0,
-          "private": "bnVsbA==",
-          "dependencies": [
-            "aws_iam_role.app_instance",
-            "data.aws_iam_policy_document.app_instance_assume",
-            "data.aws_iam_policy_document.app_instance_ecr"
-          ]
-        }
-      ]
-    },
-    {
-      "mode": "managed",
-      "type": "aws_iam_role_policy",
       "name": "vpc_flow",
       "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
       "instances": [
@@ -964,8 +927,8 @@
           "schema_version": 1,
           "attributes": {
             "ami": "ami-08fa3ed5577079e64",
-            "arn": "arn:aws:ec2:us-east-1:083971419301:instance/i-0c8d7607b53019a80",
-            "associate_public_ip_address": true,
+            "arn": "arn:aws:ec2:us-east-1:083971419301:instance/i-02de0eed04667a447",
+            "associate_public_ip_address": false,
             "availability_zone": "us-east-1a",
             "capacity_reservation_specification": [
               {
@@ -1003,7 +966,7 @@
             "host_id": "",
             "host_resource_group_arn": null,
             "iam_instance_profile": "farmsafe-dev-app-instance-profile",
-            "id": "i-0c8d7607b53019a80",
+            "id": "i-02de0eed04667a447",
             "instance_initiated_shutdown_behavior": "stop",
             "instance_lifecycle": "",
             "instance_market_options": [],
@@ -1033,8 +996,8 @@
             "password_data": "",
             "placement_group": "",
             "placement_partition_number": 0,
-            "primary_network_interface_id": "eni-044d79e659edca237",
-            "private_dns": "ip-10-0-1-53.ec2.internal",
+            "primary_network_interface_id": "eni-096c0454529f46a01",
+            "private_dns": "ip-10-0-101-57.ec2.internal",
             "private_dns_name_options": [
               {
                 "enable_resource_name_dns_a_record": false,
@@ -1042,9 +1005,9 @@
                 "hostname_type": "ip-name"
               }
             ],
-            "private_ip": "10.0.1.53",
-            "public_dns": "ec2-98-82-22-115.compute-1.amazonaws.com",
-            "public_ip": "98.82.22.115",
+            "private_ip": "10.0.101.57",
+            "public_dns": "",
+            "public_ip": "",
             "root_block_device": [
               {
                 "delete_on_termination": true,
@@ -1052,10 +1015,10 @@
                 "encrypted": true,
                 "iops": 3000,
                 "kms_key_id": "arn:aws:kms:us-east-1:083971419301:key/88b62b35-da99-4eed-954f-81cf58174727",
-                "tags": null,
+                "tags": {},
                 "tags_all": {},
                 "throughput": 125,
-                "volume_id": "vol-037482b3e24d307bd",
+                "volume_id": "vol-0ea96431fbe636373",
                 "volume_size": 40,
                 "volume_type": "gp3"
               }
@@ -1064,7 +1027,7 @@
             "security_groups": [],
             "source_dest_check": true,
             "spot_instance_request_id": "",
-            "subnet_id": "subnet-075f49a52e91a962a",
+            "subnet_id": "subnet-0fed4a4b2a788dbc4",
             "tags": {
               "Environment": "dev",
               "ManagedBy": "Terraform",
@@ -1083,7 +1046,7 @@
             },
             "tenancy": "default",
             "timeouts": null,
-            "user_data": "1d907092c0f5c443875d7ea5833f5cfc665a5ed1",
+            "user_data": null,
             "user_data_base64": null,
             "user_data_replace_on_change": false,
             "volume_tags": null,
@@ -1100,7 +1063,7 @@
             "aws_security_group.alb",
             "aws_security_group.app",
             "aws_security_group.bastion",
-            "aws_subnet.public",
+            "aws_subnet.private",
             "aws_vpc.main",
             "data.aws_ami.amazon_linux",
             "data.aws_availability_zones.available",
@@ -1296,6 +1259,13 @@
           ]
         }
       ]
+    },
+    {
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "ecr",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": []
     },
     {
       "mode": "managed",
@@ -1627,10 +1597,10 @@
           "schema_version": 0,
           "attributes": {
             "availability_zone": null,
-            "id": "arn:aws:elasticloadbalancing:us-east-1:083971419301:targetgroup/farmsafe-dev-app-tg/c5486d8e81e868e9-20251130074719288200000002",
+            "id": "arn:aws:elasticloadbalancing:us-east-1:083971419301:targetgroup/farmsafe-dev-app-tg/c5486d8e81e868e9-20251129200133074500000003",
             "port": 80,
             "target_group_arn": "arn:aws:elasticloadbalancing:us-east-1:083971419301:targetgroup/farmsafe-dev-app-tg/c5486d8e81e868e9",
-            "target_id": "i-0c8d7607b53019a80"
+            "target_id": "i-02de0eed04667a447"
           },
           "sensitive_attributes": [],
           "identity_schema_version": 0,
@@ -1643,7 +1613,7 @@
             "aws_security_group.alb",
             "aws_security_group.app",
             "aws_security_group.bastion",
-            "aws_subnet.public",
+            "aws_subnet.private",
             "aws_vpc.main",
             "data.aws_ami.amazon_linux",
             "data.aws_availability_zones.available",
@@ -2038,19 +2008,6 @@
             ],
             "id": "sg-0563d85662cb73d12",
             "ingress": [
-              {
-                "cidr_blocks": [
-                  "0.0.0.0/0"
-                ],
-                "description": "HTTP from anywhere (temporary for testing)",
-                "from_port": 80,
-                "ipv6_cidr_blocks": [],
-                "prefix_list_ids": [],
-                "protocol": "tcp",
-                "security_groups": [],
-                "self": false,
-                "to_port": 80
-              },
               {
                 "cidr_blocks": [],
                 "description": "HTTP from ALB",

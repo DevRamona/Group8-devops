@@ -1,9 +1,7 @@
+---
 - hosts: all
   become: yes
   tasks:
-    - name: Reset connection to apply group changes
-      meta: reset_connection
-
     - name: Check if Docker is installed
       command: docker --version
       register: docker_version
@@ -23,11 +21,11 @@
 
     - name: Display Docker service status
       debug:
-        msg: "Docker service is active and running"
+        msg: "Docker service is {{ 'running' if docker_service.changed == false else 'started' }}"
       when: docker_service is not failed
 
-    - name: Check if Docker Compose (Plugin) is installed
-      shell: docker compose version
+    - name: Check if Docker Compose is installed
+      command: docker-compose --version
       register: docker_compose_version
       failed_when: false
 
@@ -36,20 +34,21 @@
         msg: "Docker Compose version: {{ docker_compose_version.stdout }}"
       when: docker_compose_version.rc == 0
 
-    - name: Test Docker functionality (as root)
+    - name: Test Docker functionality by running hello-world
       command: docker run --rm hello-world
-      register: docker_test_root
+      register: docker_test
       failed_when: false
 
-    - name: Display Root Docker test result
+    - name: Display Docker test result
       debug:
-        msg: "Root Docker test: {{ 'PASSED' if docker_test_root.rc == 0 else 'FAILED' }}"
+        msg: "Docker test {{ 'passed' if docker_test.rc == 0 else 'failed' }}: {{ docker_test.stdout | default(docker_test.stderr) }}"
+      when: docker_test is defined
 
     - name: Get current user
       command: whoami
       become: no
       register: current_user
-      changed_when: false
+      failed_when: false
 
     - name: Check if user can run Docker without sudo
       command: docker ps
@@ -59,4 +58,5 @@
 
     - name: Display Docker user access status
       debug:
-        msg: "User '{{ current_user.stdout }}' {{ 'CAN' if docker_user_check.rc == 0 else 'CANNOT' }} run Docker commands without sudo."
+        msg: "Current user {{ current_user.stdout | default('unknown') }} {{ 'can' if docker_user_check.rc == 0 else 'cannot' }} run Docker commands without sudo"
+      when: docker_user_check is defined

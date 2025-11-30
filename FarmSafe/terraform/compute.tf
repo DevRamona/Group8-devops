@@ -56,19 +56,27 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "HTTP from VPC"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    description     = "HTTP from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   ingress {
-    description = "HTTPS from VPC"
-    from_port   = 443
-    to_port     = 443
+    description = "HTTP from anywhere (temporary for testing)"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description     = "HTTPS from ALB"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   egress {
@@ -83,6 +91,43 @@ resource "aws_security_group" "app" {
     local.tags,
     {
       Name = "${local.project_name}-${local.environment}-app-sg"
+    },
+  )
+}
+
+resource "aws_security_group" "alb" {
+  name        = "${local.project_name}-${local.environment}-alb-sg"
+  description = "Allow HTTP and HTTPS access to ALB"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow egress to VPC"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-alb-sg"
     },
   )
 }
@@ -153,7 +198,6 @@ resource "aws_iam_role" "app_instance" {
   )
 }
 
-// Policy to allow ECR access
 data "aws_iam_policy_document" "app_instance_ecr" {
   // GetAuthorizationToken must use "*" resource - this is an AWS requirement
   # tfsec:ignore:aws-iam-no-policy-wildcards
@@ -174,7 +218,7 @@ data "aws_iam_policy_document" "app_instance_ecr" {
       "ecr:BatchGetImage"
     ]
     resources = [
-      aws_ecr_repository.app.arn
+      "arn:aws:ecr:us-east-1:083971419301:repository/farmsafe-dev"
     ]
   }
 }
@@ -200,11 +244,13 @@ resource "aws_iam_instance_profile" "app_instance" {
 resource "aws_instance" "app" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.app_instance_type
-  subnet_id                   = aws_subnet.private["0"].id
+  subnet_id                   = aws_subnet.public["0"].id  # Temporarily public for testing
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.app.id]
-  associate_public_ip_address = false
+  associate_public_ip_address = true  # Temporarily public for testing
   iam_instance_profile        = aws_iam_instance_profile.app_instance.name
+
+  user_data = base64encode(file("${path.module}/../ansible/user-data-simple.sh"))
 
   metadata_options {
     http_endpoint = "enabled"
@@ -224,5 +270,66 @@ resource "aws_instance" "app" {
       Role = "application"
     },
   )
+}
+
+resource "aws_lb_target_group" "app" {
+  name        = "${local.project_name}-${local.environment}-app-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "instance"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-tg"
+    },
+  )
+}
+
+resource "aws_lb_target_group_attachment" "app" {
+  target_group_arn = aws_lb_target_group.app.arn
+  target_id        = aws_instance.app.id
+  port             = 80
+}
+
+resource "aws_lb" "app" {
+  name               = "${local.project_name}-${local.environment}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = [for subnet in aws_subnet.public : subnet.id]
+
+  enable_deletion_protection = false
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-alb"
+    },
+  )
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.app.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
 }
 
