@@ -178,28 +178,35 @@ jobs:
       - name: Prepare SSH key and config
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > "$SSH_KEY_PATH"
+          chmod 600 "$SSH_KEY_PATH"
           
           # Create SSH config for jump host (bastion)
-          cat > ~/.ssh/config << EOF
+          cat > "$SSH_CONFIG_PATH" << EOF
           Host bastion
             HostName ${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}
             User ${{ secrets.ANSIBLE_USER }}
-            IdentityFile ~/.ssh/id_rsa
+            IdentityFile $SSH_KEY_PATH
             StrictHostKeyChecking no
           
           Host app
             HostName ${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}
             User ${{ secrets.ANSIBLE_USER }}
-            IdentityFile ~/.ssh/id_rsa
+            IdentityFile $SSH_KEY_PATH
             ProxyJump bastion
             StrictHostKeyChecking no
           EOF
-          chmod 600 ~/.ssh/config
+          chmod 600 "$SSH_CONFIG_PATH"
           
-          # Create Ansible inventory
-          echo "app ansible_host=app ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -F ~/.ssh/config'" > inventory.ini
+          # Create Ansible inventory with absolute paths
+          echo "app ansible_host=app ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -F $SSH_CONFIG_PATH'" > inventory.ini
+          
+          # Verify SSH config exists
+          echo "SSH config path: $SSH_CONFIG_PATH"
+          ls -la "$SSH_CONFIG_PATH" || echo "SSH config file not found!"
 
       - name: Debug inventory
         run: |
@@ -228,7 +235,9 @@ jobs:
 
       - name: Prepare bastion inventory
         run: |
-          echo "bastion ansible_host=bastion ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -F ~/.ssh/config'" > bastion-inventory.ini
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          echo "bastion ansible_host=bastion ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -F $SSH_CONFIG_PATH'" > bastion-inventory.ini
 
       - name: Configure nginx on bastion
         if: steps.app-private-ip-for-ssh.outputs.app_private_ip != ''
