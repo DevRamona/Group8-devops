@@ -32,7 +32,7 @@ resource "aws_security_group" "bastion" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["102.22.143.250/32"]
   }
 
   # tfsec:ignore:aws-ec2-no-public-ingress-sgr
@@ -49,7 +49,7 @@ resource "aws_security_group" "bastion" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = [var.vpc_cidr]
+    cidr_blocks = ["102.22.143.250/32"]
   }
 
   tags = merge(
