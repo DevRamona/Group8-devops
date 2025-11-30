@@ -15,7 +15,7 @@ data "aws_ami" "amazon_linux" {
 
 resource "aws_security_group" "bastion" {
   name        = "${local.project_name}-${local.environment}-bastion-sg"
-  description = "Allow SSH access to bastion host"
+  description = "Allow SSH and HTTP(S) access to bastion host"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -24,6 +24,22 @@ resource "aws_security_group" "bastion" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = [var.allowed_ssh_cidr]
+  }
+
+  ingress {
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -69,6 +85,14 @@ resource "aws_security_group" "app" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  ingress {
+    description     = "Backend API from bastion"
+    from_port       = 5000
+    to_port         = 5000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion.id]
   }
 
   egress {
