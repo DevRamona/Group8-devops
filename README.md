@@ -163,6 +163,39 @@ cd FarmSafe/frontend
 docker build -t farmsafe-frontend .
 ```
 
+## Production Deployment
+
+### Accessing the Application
+
+The application is deployed on AWS and is accessible via the Bastion Host's public IP address. The bastion host acts as a reverse proxy, forwarding all HTTP requests to the application instance running in a private subnet.
+
+**Application URL**: `http://<bastion-public-ip>`
+
+To get the bastion host's public IP address:
+```bash
+cd FarmSafe/terraform
+terraform output bastion_public_ip
+```
+
+Or check the Terraform outputs after deployment:
+- **Bastion Public IP**: Available in `terraform output bastion_public_ip`
+- **App Private IP**: Available in `terraform output app_private_ip`
+
+### Architecture
+
+- **Bastion Host**: Public-facing EC2 instance with nginx reverse proxy
+- **Application Instance**: Private EC2 instance running Docker containers (backend + MongoDB)
+- **Security**: Application instance is in a private subnet, only accessible through the bastion
+
+### Infrastructure
+
+The infrastructure is managed with Terraform and includes:
+- VPC with public and private subnets
+- Bastion host in public subnet (with Elastic IP)
+- Application instance in private subnet
+- Security groups configured for proper access control
+- RDS database for persistent data storage
+
 ## CI/CD Pipeline
 
 ### GitHub Actions
@@ -174,6 +207,13 @@ The project includes a CI pipeline (`.github/workflows/ci.yml`) that:
 - Runs tests (minimum 1 test required)
 - Builds Docker images to validate containerization
 - Validates docker-compose configuration
+
+### Deployment Pipeline
+
+The CD pipeline (`.github/workflows/cd.yml`) automatically:
+- Builds and pushes Docker images to Amazon ECR
+- Deploys the application to the EC2 instance using Ansible
+- Configures nginx on the bastion host for public access
 
 ### Running Tests Locally
 
