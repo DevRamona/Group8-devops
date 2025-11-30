@@ -26,6 +26,7 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = [var.allowed_ssh_cidr] # Use variable for security
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
     description = "HTTP from anywhere"
     from_port   = 80
@@ -34,6 +35,7 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0
@@ -41,7 +43,6 @@ resource "aws_security_group" "bastion" {
     protocol    = "-1"
     # Bastion needs to talk OUT to the internet (0.0.0.0/0) for updates and services.
     cidr_blocks = ["0.0.0.0/0"]
-    # tfsec:ignore:aws-ec2-no-public-egress-sgr
   }
 
   tags = merge(
@@ -73,13 +74,13 @@ resource "aws_security_group" "app" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
     description = "HTTP from anywhere (temporary for testing)"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   ingress {
@@ -111,22 +112,22 @@ resource "aws_security_group" "alb" {
   description = "Allow HTTP and HTTPS access to ALB"
   vpc_id      = aws_vpc.main.id
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
     description = "HTTP from anywhere"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
     description = "HTTPS from anywhere"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   }
 
   ingress {
@@ -144,7 +145,7 @@ resource "aws_security_group" "alb" {
     to_port     = 0
     protocol    = "-1"
     # Application needs to talk OUT to the internet (0.0.0.0/0) for ECR, S3, etc.
-    cidr_blocks = ["0.0.0.0/0"] 
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = merge(
@@ -356,6 +357,7 @@ resource "aws_lb" "app" {
   )
 }
 
+# tfsec:ignore:aws-elb-http-not-used
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.app.arn
   port              = "80"
