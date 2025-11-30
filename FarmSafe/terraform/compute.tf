@@ -26,20 +26,22 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = [var.allowed_ssh_cidr]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
     description = "HTTP from internet"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
     description = "HTTPS from internet"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
