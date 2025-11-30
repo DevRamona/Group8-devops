@@ -175,7 +175,7 @@ jobs:
           echo "token=$ECR_TOKEN" >> "$GITHUB_OUTPUT"
           echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
 
-      - name: Run Ansible playbook
+      - name: Run Ansible playbook for app instance
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
@@ -183,5 +183,43 @@ jobs:
             -i inventory.ini \
             --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }}" \
             FarmSafe/ansible/playbook.yml
+
+      - name: Get app instance private IP
+        id: app-ip
+        run: |
+          APP_IP=$(aws ec2 describe-instances \
+            --region ${{ env.AWS_REGION }} \
+            --filters "Name=tag:Name,Values=farmsafe-dev-app" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PrivateIpAddress' \
+            --output text)
+          echo "app_private_ip=$APP_IP" >> "$GITHUB_OUTPUT"
+          echo "App instance private IP: $APP_IP"
+
+      - name: Get bastion host IP
+        id: bastion-ip
+        run: |
+          BASTION_IP=$(aws ec2 describe-instances \
+            --region ${{ env.AWS_REGION }} \
+            --filters "Name=tag:Name,Values=farmsafe-dev-bastion" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "bastion_ip=$BASTION_IP" >> "$GITHUB_OUTPUT"
+          echo "Bastion host IP: $BASTION_IP"
+
+      - name: Prepare bastion inventory
+        run: |
+          echo "bastion ansible_host=${{ steps.bastion-ip.outputs.bastion_ip }} ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > bastion-inventory.ini
+
+      - name: Configure nginx on bastion
+        when: steps.app-ip.outputs.app_private_ip != ''
+        run: |
+          ansible-playbook \
+            -i bastion-inventory.ini \
+            --extra-vars "app_private_ip=${{ steps.app-ip.outputs.app_private_ip }}" \
+            FarmSafe/ansible/bastion-playbook.yml
+
+      - name: Display application URL
+        run: |
+          echo "::notice::Application is accessible at: http://${{ steps.bastion-ip.outputs.bastion_ip }}"
 
 

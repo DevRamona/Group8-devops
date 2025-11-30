@@ -3,19 +3,19 @@ data "aws_ami" "amazon_linux" {
   owners      = ["amazon"]
 
   filter {
-    name   = "name"
-    values = ["al2023-ami-*-x86_64"]
+    name    = "name"
+    values  = ["al2023-ami-*-x86_64"]
   }
 
   filter {
-    name   = "architecture"
-    values = ["x86_64"]
+    name    = "architecture"
+    values  = ["x86_64"]
   }
 }
 
 resource "aws_security_group" "bastion" {
   name        = "${local.project_name}-${local.environment}-bastion-sg"
-  description = "Allow SSH access to bastion host"
+  description = "Allow SSH and HTTP(S) access to bastion host"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -23,15 +23,38 @@ resource "aws_security_group" "bastion" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_cidr]
+    cidr_blocks = [var.allowed_ssh_cidr] # Use variable for security
   }
 
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+  ingress {
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    # FIX: Restricting HTTP to your IP (102.22.143.250/32) or remove this block entirely.
+    cidr_blocks = ["102.22.143.250/32"] 
+  }
+
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+  ingress {
+    description = "HTTPS from internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    # FIX: Restricting HTTPS to your IP (102.22.143.250/32) 
+    # NOTE: It's best practice to REMOVE this block if the Bastion is NOT a web server.
+    cidr_blocks = ["102.22.143.250/32"]
+  }
+
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
   egress {
-    description = "Allow egress within VPC"
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = [var.vpc_cidr]
+    # Bastion needs to talk OUT to the internet (0.0.0.0/0) for updates and services.
+    cidr_blocks = ["0.0.0.0/0"] 
   }
 
   tags = merge(
@@ -71,12 +94,22 @@ resource "aws_security_group" "app" {
     cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
+  ingress {
+    description     = "Backend API from bastion"
+    from_port       = 5000
+    to_port         = 5000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.bastion.id]
+  }
+
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
   egress {
-    description = "Allow egress within VPC"
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = [var.vpc_cidr]
+    # Application needs to talk OUT to the internet (0.0.0.0/0) for ECR, S3, etc.
+    cidr_blocks = ["0.0.0.0/0"] 
   }
 
   tags = merge(
@@ -142,8 +175,8 @@ data "aws_iam_policy_document" "app_instance_assume" {
 }
 
 resource "aws_iam_role" "app_instance" {
-  name               = "${local.project_name}-${local.environment}-app-instance-role"
-  assume_role_policy = data.aws_iam_policy_document.app_instance_assume.json
+  name                = "${local.project_name}-${local.environment}-app-instance-role"
+  assume_role_policy  = data.aws_iam_policy_document.app_instance_assume.json
 
   tags = merge(
     local.tags,
@@ -180,9 +213,9 @@ data "aws_iam_policy_document" "app_instance_ecr" {
 }
 
 resource "aws_iam_role_policy" "app_instance_ecr" {
-  name   = "${local.project_name}-${local.environment}-app-instance-ecr-policy"
-  role   = aws_iam_role.app_instance.id
-  policy = data.aws_iam_policy_document.app_instance_ecr.json
+  name    = "${local.project_name}-${local.environment}-app-instance-ecr-policy"
+  role    = aws_iam_role.app_instance.id
+  policy  = data.aws_iam_policy_document.app_instance_ecr.json
 }
 
 resource "aws_iam_instance_profile" "app_instance" {
@@ -225,4 +258,3 @@ resource "aws_instance" "app" {
     },
   )
 }
-
