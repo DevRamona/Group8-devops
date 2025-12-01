@@ -153,6 +153,10 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install ansible
 
+      - name: Install Ansible Collections (Fix for ECR Login)
+        run: |
+          ansible-galaxy collection install community.aws
+
       - name: Get bastion host IP
         id: bastion-ip-for-ssh
         run: |
