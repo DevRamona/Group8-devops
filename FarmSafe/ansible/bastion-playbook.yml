@@ -22,9 +22,9 @@
               listen 80;
               server_name _;
 
-              # Proxy all requests to the app instance backend
+              # Proxy all requests to the app instance frontend
               location / {
-                  proxy_pass http://{{ app_private_ip }}:5000;
+                  proxy_pass http://{{ app_private_ip }}:80;
                   proxy_http_version 1.1;
                   proxy_set_header Host $host;
                   proxy_set_header X-Real-IP $remote_addr;
@@ -37,7 +37,7 @@
               # Health check endpoint
               location /health {
                   access_log off;
-                  proxy_pass http://{{ app_private_ip }}:5000/health;
+                  proxy_pass http://{{ app_private_ip }}:80;
               }
           }
         dest: /etc/nginx/conf.d/farmsafe.conf

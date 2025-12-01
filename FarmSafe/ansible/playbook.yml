@@ -4,7 +4,8 @@
   vars:
     # These variables are passed in via --extra-vars
     docker_registry: "{{ docker_registry | default('') }}"
-    docker_image: "{{ docker_image | default('') }}"
+    backend_image: "{{ backend_image | default('') }}"
+    frontend_image: "{{ frontend_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
 
   tasks:

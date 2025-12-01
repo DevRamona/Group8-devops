@@ -15,6 +15,8 @@ env:
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'farmsafe-dev' }}
   APP_DOCKER_CONTEXT: FarmSafe
   DOCKERFILE_PATH: FarmSafe/Dockerfile
+  FRONTEND_DOCKER_CONTEXT: FarmSafe/frontend
+  FRONTEND_DOCKERFILE_PATH: FarmSafe/frontend/Dockerfile
 
 jobs:
   backend_ci:
@@ -127,18 +129,37 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image
-        id: build-and-push
+      - name: Build and push backend image
+        id: build-backend
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:backend-${{ env.IMAGE_TAG }}
+          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:backend-latest
 
           docker build \
             -f $DOCKERFILE_PATH \
             -t $IMAGE_URI \
             $APP_DOCKER_CONTEXT
+
+          docker tag $IMAGE_URI $LATEST_URI
+          docker push $IMAGE_URI
+          docker push $LATEST_URI
+
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push frontend image
+        id: build-frontend
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:frontend-${{ env.IMAGE_TAG }}
+          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:frontend-latest
+
+          docker build \
+            -f $FRONTEND_DOCKERFILE_PATH \
+            -t $IMAGE_URI \
+            $FRONTEND_DOCKER_CONTEXT
 
           docker tag $IMAGE_URI $LATEST_URI
           docker push $IMAGE_URI
