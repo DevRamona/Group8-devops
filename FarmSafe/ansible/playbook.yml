@@ -2,229 +2,88 @@
 - hosts: all
   become: yes
   vars:
+    # These variables are passed in via --extra-vars
     docker_registry: "{{ docker_registry | default('') }}"
     docker_image: "{{ docker_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
+
   tasks:
-    # 🩹 FIX for DNF Lock Conflict with User Data
-    # Using explicit 'shell' module syntax to avoid Ansible incorrectly resolving to 'command'
-    - name: Ensure DNF lock is removed
-      shell: |
-        rm -f /var/cache/dnf/*/*.lock
-        rm -f /var/run/dnf.pid
-      args:
-        warn: false
-      failed_when: false # Allow this task to fail if files don't exist
+    # --- System Setup Tasks ---
+
+    # FIX for the "Unsupported parameters for (ansible.legacy.command) module: warn" error.
+    # We use the explicit 'cmd' key within the 'shell' module to prevent Ansible 
+    # from incorrectly falling back to the 'command' module.
+    - name: Ensure DNF lock is removed (Force Shell Module)
+      shell:
+        cmd: |
+          rm -f /var/cache/dnf/*/*.lock
+          rm -f /var/run/dnf.pid
+        warn: false # This argument is now correctly passed to the shell module
+      failed_when: false # Allows this task to pass even if the files don't exist
+      become: yes
 
     # Amazon Linux 2023 uses dnf as package manager
     - name: Update package index (dnf)
       dnf:
         update_cache: yes
+      become: yes
 
-    - name: Install required packages (dnf)
+    - name: Install required packages
       dnf:
         name:
-          - docker
           - python3-pip
-          - unzip
-          - nginx
+          - docker
         state: present
+      become: yes
 
-    - name: Install Docker Compose plugin (dnf)
-      dnf:
-        name: docker-compose-plugin
-        state: present
+    # --- Docker Login and Service Tasks ---
 
-    - name: Start and enable Docker service
-      service:
+    - name: Ensure the Docker service is running and enabled
+      systemd:
         name: docker
         state: started
         enabled: yes
+      become: yes
 
-    - name: Add user to docker group
-      user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: yes
+    - name: Install Python required packages for Docker interaction
+      pip:
+        name:
+          - docker
+          - boto3
+        executable: pip3
+      become: yes
 
-    - name: Install AWS CLI
-      shell: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip -q awscliv2.zip
-        ./aws/install
-        rm -rf aws awscliv2.zip
-      args:
-        creates: /usr/local/bin/aws
+    - name: Log in to AWS ECR
+      community.aws.ecr_login:
+        region: "{{ aws_region }}"
+      become: yes
 
-    - name: Configure AWS credentials for ECR login
-      when: docker_registry != ""
-      shell: |
-        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ docker_registry }}
-      register: ecr_login
-      changed_when: false
+    # --- Application Deployment Tasks ---
+      
+    - name: Pull the specific Docker image
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        source: pull
+        state: present
+        # Note: login is handled by ecr_login task
 
-    - name: Create application directory
-      file:
-        path: /opt/farmsafe
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0755'
-
-    - name: Create production docker-compose file
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      copy:
-        content: |
-          services:
-            mongodb:
-              image: mongo:7.0
-              container_name: farmsafe-mongodb
-              restart: unless-stopped
-              ports:
-                - "27017:27017"
-              environment:
-                MONGO_INITDB_DATABASE: farmsafe_db
-              volumes:
-                - mongodb_data:/data/db
-              healthcheck:
-                test: ["CMD", "mongosh", "localhost:27017/farmsafe_db", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
-                interval: 10s
-                timeout: 5s
-                retries: 5
-
-            backend:
-              image: "{{ docker_image }}"
-              container_name: farmsafe-backend
-              restart: unless-stopped
-              environment:
-                NODE_ENV: production
-                PORT: 5000
-                MONGO_URI: mongodb://mongodb:27017/farmsafe_db
-                JWT_SECRET: ${JWT_SECRET:-changeme}
-              ports:
-                - "5000:5000"
-              depends_on:
-                mongodb:
-                  condition: service_healthy
-              healthcheck:
-                test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
-                interval: 30s
-                timeout: 3s
-                retries: 3
-                start_period: 10s
-
-          volumes:
-            mongodb_data:
-              driver: local
-        dest: /opt/farmsafe/docker-compose.yml
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0644'
-
-    - name: Pull latest Docker image
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      shell: docker pull {{ docker_image }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-
-    - name: Stop existing containers
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      shell: docker compose down
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
+    - name: Stop and remove old container
+      community.docker.docker_container:
+        name: farmsafe_app
+        state: absent
       ignore_errors: yes
 
-    - name: Start services with docker compose
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      shell: docker compose up -d
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-
-    - name: Verify services are running
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      shell: docker compose ps
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: compose_status
-
-    - name: Display service status
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      debug:
-        msg: "{{ compose_status.stdout_lines }}"
-
-    - name: Configure nginx reverse proxy for app instance
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_app']
-      copy:
-        content: |
-          server {
-              listen 80;
-              server_name _;
-
-              location / {
-                  proxy_pass http://localhost:5000;
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-              }
-
-              # Health check endpoint for ALB
-              location /health {
-                  access_log off;
-                  return 200 "healthy\n";
-                  add_header Content-Type text/plain;
-              }
-          }
-        dest: /etc/nginx/conf.d/farmsafe.conf
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Configure nginx reverse proxy for bastion
-      when: docker_image != "" and inventory_hostname in groups['farmsafe_bastion']
-      copy:
-        content: |
-          server {
-              listen 80;
-              server_name _;
-
-              location / {
-                  proxy_pass http://10.0.1.53;
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-              }
-
-              # Health check endpoint
-              location /health {
-                  access_log off;
-                  return 200 "healthy\n";
-                  add_header Content-Type text/plain;
-              }
-          }
-        dest: /etc/nginx/conf.d/farmsafe.conf
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Remove default nginx configuration
-      file:
-        path: /etc/nginx/conf.d/default.conf
-        state: absent
-
-    - name: Start and enable nginx service
-      service:
-        name: nginx
+    - name: Deploy the new Docker container (FarmSafe)
+      community.docker.docker_container:
+        name: farmsafe_app
+        image: "{{ docker_image }}"
         state: started
-        enabled: yes
+        restart_policy: always
+        ports:
+          - "80:80" # Map host port 80 to container port 80
+        env:
+          # Pass environment variables to the container if needed
+          AWS_REGION: "{{ aws_region }}"
+          REGISTRY: "{{ docker_registry }}"
+          # Add any other required environment variables here
+      become: yes
