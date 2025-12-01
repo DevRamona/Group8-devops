@@ -54,36 +54,26 @@
       become: yes
 
     - name: Log in to AWS ECR
-      community.aws.ecr_login:
-        region: "{{ aws_region }}"
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ docker_registry }}
+      register: ecr_login
+      changed_when: false
       become: yes
 
     # --- Application Deployment Tasks ---
       
     - name: Pull the specific Docker image
-      community.docker.docker_image:
-        name: "{{ docker_image }}"
-        source: pull
-        state: present
-        # Note: login is handled by ecr_login task
+      shell: docker pull {{ docker_image }}
+      become: yes
 
     - name: Stop and remove old container
-      community.docker.docker_container:
-        name: farmsafe_app
-        state: absent
-      ignore_errors: yes
+      shell: docker rm -f farmsafe_app || true
+      become: yes
 
     - name: Deploy the new Docker container (FarmSafe)
-      community.docker.docker_container:
-        name: farmsafe_app
-        image: "{{ docker_image }}"
-        state: started
-        restart_policy: always
-        ports:
-          - "80:80" # Map host port 80 to container port 80
-        env:
-          # Pass environment variables to the container if needed
-          AWS_REGION: "{{ aws_region }}"
-          REGISTRY: "{{ docker_registry }}"
-          # Add any other required environment variables here
+      shell: |
+        docker run -d --name farmsafe_app --restart always -p 80:80 \
+          -e AWS_REGION={{ aws_region }} \
+          -e REGISTRY={{ docker_registry }} \
+          {{ docker_image }}
       become: yes
