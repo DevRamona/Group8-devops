@@ -175,6 +175,19 @@ jobs:
           echo "app_private_ip=$APP_IP" >> "$GITHUB_OUTPUT"
           echo "App instance private IP: $APP_IP"
 
+      - name: Verify IPs are retrieved
+        run: |
+          if [ -z "${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}" ]; then
+            echo "Error: Bastion IP is empty"
+            exit 1
+          fi
+          if [ -z "${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}" ]; then
+            echo "Error: App private IP is empty"
+            exit 1
+          fi
+          echo "Bastion IP: ${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}"
+          echo "App private IP: ${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}"
+
       - name: Prepare SSH key and config
         run: |
           mkdir -p ~/.ssh
@@ -208,6 +221,20 @@ jobs:
           echo "SSH config path: $SSH_CONFIG_PATH"
           ls -la "$SSH_CONFIG_PATH" || echo "SSH config file not found!"
 
+      - name: Test SSH connection to bastion
+        run: |
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          echo "Testing SSH to bastion..."
+          ssh -i "$SSH_KEY_PATH" -F "$SSH_CONFIG_PATH" -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.ANSIBLE_USER }}@bastion "echo 'SSH to bastion successful'" || (echo "SSH to bastion failed"; exit 1)
+
+      - name: Test SSH connection to app via bastion
+        run: |
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          echo "Testing SSH to app via bastion..."
+          ssh -i "$SSH_KEY_PATH" -F "$SSH_CONFIG_PATH" -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.ANSIBLE_USER }}@app "echo 'SSH to app successful'" || (echo "SSH to app failed"; exit 1)
+
       - name: Debug inventory
         run: |
           echo "===== inventory.ini contents ====="
@@ -219,6 +246,7 @@ jobs:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           ansible-playbook \
+            -vvv \
             -i inventory.ini \
             --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }}" \
             FarmSafe/ansible/playbook.yml
