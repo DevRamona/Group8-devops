@@ -15,7 +15,7 @@ data "aws_ami" "amazon_linux" {
 
 resource "aws_security_group" "bastion" {
   name        = "${local.project_name}-${local.environment}-bastion-sg"
-  description = "Allow SSH and HTTP access to bastion host"
+  description = "Allow SSH access to bastion host"
   vpc_id      = aws_vpc.main.id
 
   ingress {
