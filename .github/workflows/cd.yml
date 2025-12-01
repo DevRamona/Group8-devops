@@ -153,6 +153,7 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install ansible
           ansible-galaxy collection install community.aws
+          ansible-galaxy collection install community.docker
 
       - name: Install Ansible Collections (Fix for ECR Login)
         run: |
