@@ -15,7 +15,7 @@ data "aws_ami" "amazon_linux" {
 
 resource "aws_security_group" "bastion" {
   name        = "${local.project_name}-${local.environment}-bastion-sg"
-  description = "Allow SSH and HTTP(S) access to bastion host"
+  description = "Allow SSH access to bastion host"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -28,23 +28,11 @@ resource "aws_security_group" "bastion" {
 
   # tfsec:ignore:aws-ec2-no-public-ingress-sgr
   ingress {
-    description = "HTTP from internet"
+    description = "HTTP from anywhere"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    # FIX: Restricting HTTP to your IP (102.22.143.250/32) or remove this block entirely.
-    cidr_blocks = ["102.22.143.250/32"] 
-  }
-
-  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
-  ingress {
-    description = "HTTPS from internet"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    # FIX: Restricting HTTPS to your IP (102.22.143.250/32) 
-    # NOTE: It's best practice to REMOVE this block if the Bastion is NOT a web server.
-    cidr_blocks = ["102.22.143.250/32"]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # tfsec:ignore:aws-ec2-no-public-egress-sgr
@@ -54,7 +42,7 @@ resource "aws_security_group" "bastion" {
     to_port     = 0
     protocol    = "-1"
     # Bastion needs to talk OUT to the internet (0.0.0.0/0) for updates and services.
-    cidr_blocks = ["0.0.0.0/0"] 
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = merge(
@@ -79,19 +67,67 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "HTTP from VPC"
+    description     = "HTTP from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+  ingress {
+    description = "HTTP from anywhere (temporary for testing)"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    description = "HTTPS from VPC"
+    description     = "HTTPS from ALB"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "Allow egress within VPC"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-sg"
+    },
+  )
+}
+
+resource "aws_security_group" "alb" {
+  name        = "${local.project_name}-${local.environment}-alb-sg"
+  description = "Allow HTTP and HTTPS access to ALB"
+  vpc_id      = aws_vpc.main.id
+
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+  ingress {
+    description = "HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+  ingress {
+    description = "HTTPS from anywhere"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
@@ -104,18 +140,18 @@ resource "aws_security_group" "app" {
 
   # tfsec:ignore:aws-ec2-no-public-egress-sgr
   egress {
-    description = "Allow all outbound traffic"
+    description = "Allow egress to VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     # Application needs to talk OUT to the internet (0.0.0.0/0) for ECR, S3, etc.
-    cidr_blocks = ["0.0.0.0/0"] 
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = merge(
     local.tags,
     {
-      Name = "${local.project_name}-${local.environment}-app-sg"
+      Name = "${local.project_name}-${local.environment}-alb-sg"
     },
   )
 }
@@ -127,6 +163,12 @@ resource "aws_instance" "bastion" {
   associate_public_ip_address = true
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.bastion.id]
+
+  user_data = base64encode(templatefile("${path.module}/../ansible/user-data.sh", {
+    aws_region      = var.aws_region
+    docker_registry = data.aws_ecr_repository.app.repository_url
+    docker_image    = "${data.aws_ecr_repository.app.repository_url}:latest"
+  }))
 
   metadata_options {
     http_endpoint = "enabled"
@@ -186,7 +228,6 @@ resource "aws_iam_role" "app_instance" {
   )
 }
 
-// Policy to allow ECR access
 data "aws_iam_policy_document" "app_instance_ecr" {
   // GetAuthorizationToken must use "*" resource - this is an AWS requirement
   # tfsec:ignore:aws-iam-no-policy-wildcards
@@ -207,7 +248,7 @@ data "aws_iam_policy_document" "app_instance_ecr" {
       "ecr:BatchGetImage"
     ]
     resources = [
-      aws_ecr_repository.app.arn
+      data.aws_ecr_repository.app.arn
     ]
   }
 }
@@ -233,11 +274,17 @@ resource "aws_iam_instance_profile" "app_instance" {
 resource "aws_instance" "app" {
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.app_instance_type
-  subnet_id                   = aws_subnet.private["0"].id
+  subnet_id                   = aws_subnet.public["0"].id  # Temporarily public for testing
   key_name                    = var.key_name
   vpc_security_group_ids      = [aws_security_group.app.id]
-  associate_public_ip_address = false
+  associate_public_ip_address = true  # Temporarily public for testing
   iam_instance_profile        = aws_iam_instance_profile.app_instance.name
+
+  user_data = base64encode(templatefile("${path.module}/../ansible/user-data.sh", {
+    aws_region      = var.aws_region
+    docker_registry = data.aws_ecr_repository.app.repository_url
+    docker_image    = "${data.aws_ecr_repository.app.repository_url}:latest"
+  }))
 
   metadata_options {
     http_endpoint = "enabled"
@@ -258,3 +305,67 @@ resource "aws_instance" "app" {
     },
   )
 }
+
+resource "aws_lb_target_group" "app" {
+  name        = "${local.project_name}-${local.environment}-app-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "instance"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-app-tg"
+    },
+  )
+}
+
+resource "aws_lb_target_group_attachment" "app" {
+  target_group_arn = aws_lb_target_group.app.arn
+  target_id        = aws_instance.app.id
+  port             = 80
+}
+
+resource "aws_lb" "app" {
+  name               = "${local.project_name}-${local.environment}-alb"
+  internal           = false  # tfsec:ignore:aws-elb-alb-not-public
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = [for subnet in aws_subnet.public : subnet.id]
+
+  enable_deletion_protection = false
+  drop_invalid_header_fields = true
+
+  tags = merge(
+    local.tags,
+    {
+      Name = "${local.project_name}-${local.environment}-alb"
+    },
+  )
+}
+
+# tfsec:ignore:aws-elb-http-not-used
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.app.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+

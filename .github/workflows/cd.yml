@@ -173,9 +173,15 @@ jobs:
           sudo apt-get install -y python3-pip
           python3 -m pip install --upgrade pip
           pip install ansible
+          ansible-galaxy collection install community.aws
+          ansible-galaxy collection install community.docker
+
+      - name: Install Ansible Collections (Fix for ECR Login)
+        run: |
+          ansible-galaxy collection install community.aws
 
       - name: Get bastion host IP
-        id: bastion-ip
+        id: bastion-ip-for-ssh
         run: |
           BASTION_IP=$(aws ec2 describe-instances \
             --region ${{ env.AWS_REGION }} \
@@ -185,46 +191,8 @@ jobs:
           echo "bastion_ip=$BASTION_IP" >> "$GITHUB_OUTPUT"
           echo "Bastion host IP: $BASTION_IP"
 
-      - name: Prepare SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          # Configure SSH to use Bastion as Jump Host
-          BASTION_IP=${{ steps.bastion-ip.outputs.bastion_ip }}
-          SSH_USER=${{ secrets.ANSIBLE_USER }}
-          
-          PROXY_CMD="ssh -o StrictHostKeyChecking=no -W %h:%p -i ~/.ssh/id_rsa $SSH_USER@$BASTION_IP"
-          
-          echo "app ansible_host=${{ secrets.ANSIBLE_HOST }} ansible_user=$SSH_USER ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand=\"$PROXY_CMD\"'" > inventory.ini
-
-      - name: Debug inventory
-        run: |
-          echo "===== inventory.ini contents ====="
-          cat inventory.ini
-          echo "================================="
-
-      - name: Get ECR login token
-        id: ecr-token
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          ECR_TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
-          echo "token=$ECR_TOKEN" >> "$GITHUB_OUTPUT"
-          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
-
-      - name: Run Ansible playbook for app instance
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          ansible-playbook \
-            -i inventory.ini \
-            --extra-vars "docker_registry=$REGISTRY backend_image=${{ steps.build-backend.outputs.image_uri }} frontend_image=${{ steps.build-frontend.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }} jwt_secret=${{ secrets.JWT_SECRET }}" \
-            FarmSafe/ansible/playbook.yml
-
       - name: Get app instance private IP
-        id: app-ip
+        id: app-private-ip-for-ssh
         run: |
           APP_IP=$(aws ec2 describe-instances \
             --region ${{ env.AWS_REGION }} \
@@ -234,20 +202,102 @@ jobs:
           echo "app_private_ip=$APP_IP" >> "$GITHUB_OUTPUT"
           echo "App instance private IP: $APP_IP"
 
+      - name: Verify IPs are retrieved
+        run: |
+          if [ -z "${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}" ]; then
+            echo "Error: Bastion IP is empty"
+            exit 1
+          fi
+          if [ -z "${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}" ]; then
+            echo "Error: App private IP is empty"
+            exit 1
+          fi
+          echo "Bastion IP: ${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}"
+          echo "App private IP: ${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}"
+
+      - name: Prepare SSH key and config
+        run: |
+          mkdir -p ~/.ssh
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > "$SSH_KEY_PATH"
+          chmod 600 "$SSH_KEY_PATH"
+          
+          # Create SSH config for jump host (bastion)
+          cat > "$SSH_CONFIG_PATH" << EOF
+          Host bastion
+            HostName ${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}
+            User ${{ secrets.ANSIBLE_USER }}
+            IdentityFile $SSH_KEY_PATH
+            StrictHostKeyChecking no
+          
+          Host app
+            HostName ${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}
+            User ${{ secrets.ANSIBLE_USER }}
+            IdentityFile $SSH_KEY_PATH
+            ProxyJump bastion
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$SSH_CONFIG_PATH"
+          
+          # Create Ansible inventory with absolute paths
+          echo "app ansible_host=app ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ControlMaster=no -o ControlPersist=no -F $SSH_CONFIG_PATH'" > inventory.ini
+          
+          # Verify SSH config exists
+          echo "SSH config path: $SSH_CONFIG_PATH"
+          ls -la "$SSH_CONFIG_PATH" || echo "SSH config file not found!"
+
+      - name: Test SSH connection to bastion
+        run: |
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          echo "Testing SSH to bastion..."
+          ssh -i "$SSH_KEY_PATH" -F "$SSH_CONFIG_PATH" -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.ANSIBLE_USER }}@bastion "echo 'SSH to bastion successful'" || (echo "SSH to bastion failed"; exit 1)
+
+      - name: Test SSH connection to app via bastion
+        run: |
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          echo "Testing SSH to app via bastion..."
+          ssh -i "$SSH_KEY_PATH" -F "$SSH_CONFIG_PATH" -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.ANSIBLE_USER }}@app "echo 'SSH to app successful'" || (echo "SSH to app failed"; exit 1)
+
+      - name: Debug inventory
+        run: |
+          echo "===== inventory.ini contents ====="
+          cat inventory.ini
+          echo "================================="
+
+      - name: Wait for instances to be ready
+        run: sleep 60
+
+      - name: Run Ansible playbook
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          ansible-playbook \
+            -vvv \
+            -i inventory.ini \
+            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }}" \
+            FarmSafe/ansible/playbook.yml
+
+
       - name: Prepare bastion inventory
         run: |
-          echo "bastion ansible_host=${{ steps.bastion-ip.outputs.bastion_ip }} ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > bastion-inventory.ini
+          SSH_CONFIG_PATH="$HOME/.ssh/config"
+          SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+          echo "bastion ansible_host=bastion ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -F $SSH_CONFIG_PATH'" > bastion-inventory.ini
 
       - name: Configure nginx on bastion
-        when: steps.app-ip.outputs.app_private_ip != ''
+        if: steps.app-ip.outputs.app_private_ip != ''
         run: |
           ansible-playbook \
             -i bastion-inventory.ini \
-            --extra-vars "app_private_ip=${{ steps.app-ip.outputs.app_private_ip }}" \
+            --extra-vars "app_private_ip=${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}" \
             FarmSafe/ansible/bastion-playbook.yml
 
       - name: Display application URL
         run: |
-          echo "::notice::Application is accessible at: http://${{ steps.bastion-ip.outputs.bastion_ip }}"
+          echo "::notice::Application is accessible at: http://${{ steps.bastion-ip-for-ssh.outputs.bastion_ip }}"
 
 

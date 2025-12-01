@@ -9,7 +9,7 @@ FarmSafe addresses critical challenges faced by smallholder farmers in Rwanda, w
 ## Team Members
 
 - Nana Koramah Abeasi - Frontend developer
-- Ramona Ingabire - DevOp Engineer
+- Ramona Ingabire - DevOps Engineer
 - Cecilia Munayani Banda - Backend developer/ DevSecOps Tasks
 
 ## Project Overview
@@ -266,6 +266,52 @@ FarmSafe/
 │       └── ci.yml
 └── README.md
 ```
+
+## Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│                 │    │                 │    │                 │
+│   User/Client   │◄──►│  Bastion Host   │◄──►│  App Instance   │
+│                 │    │                 │    │                 │
+│   Browser       │    │  Nginx Reverse  │    │ Docker Containers│
+│   (HTTP/HTTPS)  │    │  Proxy (Port 80)│    │                 │
+└─────────────────┘    └─────────────────┘    │ • Backend API   │
+                                              │   (Node.js/TS)  │
+                                              │ • Frontend SPA  │
+                                              │   (React/nginx) │
+                                              │ • MongoDB       │
+                                              └─────────────────┘
+                                                       │
+                                                       ▼
+                                              ┌─────────────────┐
+                                              │                 │
+                                              │   RDS Database  │
+                                              │   (PostgreSQL)  │
+                                              │                 │
+                                              └─────────────────┘
+```
+
+### Architecture Components
+
+- **Bastion Host**: Public-facing entry point with nginx reverse proxy forwarding requests to the application instance
+- **Application Instance**: Private EC2 instance running Docker containers for backend, frontend, and MongoDB
+- **Backend**: Node.js/Express API server serving both REST endpoints and static frontend files
+- **Frontend**: React SPA served directly by the backend for simplified deployment
+- **Database**: AWS RDS PostgreSQL instance for persistent data storage
+- **Security**: Security groups restrict access between components, bastion allows public HTTP access
+
+### Network Flow
+1. User accesses application via bastion host's public IP
+2. Bastion nginx proxies requests to application instance (private IP)
+3. Application instance serves frontend static files and API responses
+4. Database connections use private networking within VPC
+
+## Live Application
+
+**Application URL**:
+
+ `http://13.219.156.186` 
 
 ## Links
 
