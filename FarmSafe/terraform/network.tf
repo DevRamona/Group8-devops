@@ -14,7 +14,6 @@ resource "aws_vpc" "main" {
 resource "aws_cloudwatch_log_group" "vpc_flow" {
   name              = "/aws/vpc/${local.project_name}-${local.environment}"
   retention_in_days = 30
-  kms_key_id        = aws_kms_key.observability.arn
 
   tags = local.tags
 }
