@@ -11,8 +11,8 @@ resource "aws_vpc" "main" {
   )
 }
 
+# tfsec:ignore:aws-cloudwatch-log-group-customer-key
 resource "aws_cloudwatch_log_group" "vpc_flow" {
-  # tfsec:ignore:aws-cloudwatch-log-group-customer-key
   name              = "/aws/vpc/${local.project_name}-${local.environment}"
   retention_in_days = 30
 
