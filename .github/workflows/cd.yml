@@ -241,6 +241,9 @@ jobs:
           cat inventory.ini
           echo "================================="
 
+      - name: Wait for instances to be ready
+        run: sleep 60
+
       - name: Run Ansible playbook
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
