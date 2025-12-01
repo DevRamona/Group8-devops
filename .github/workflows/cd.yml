@@ -231,18 +231,26 @@ jobs:
             User ${{ secrets.ANSIBLE_USER }}
             IdentityFile $SSH_KEY_PATH
             StrictHostKeyChecking no
-          
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+            TCPKeepAlive yes
+            ConnectTimeout 30
+        
           Host app
             HostName ${{ steps.app-private-ip-for-ssh.outputs.app_private_ip }}
             User ${{ secrets.ANSIBLE_USER }}
             IdentityFile $SSH_KEY_PATH
             ProxyJump bastion
             StrictHostKeyChecking no
+            ServerAliveInterval 60
+            ServerAliveCountMax 3
+            TCPKeepAlive yes
+            ConnectTimeout 30
           EOF
           chmod 600 "$SSH_CONFIG_PATH"
           
-          # Create Ansible inventory with absolute paths
-          echo "app ansible_host=app ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ControlMaster=no -o ControlPersist=no -F $SSH_CONFIG_PATH'" > inventory.ini
+          # Create Ansible inventory with absolute paths and keepalive settings
+          echo "app ansible_host=app ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ControlMaster=no -o ControlPersist=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes -o ConnectTimeout=30 -F $SSH_CONFIG_PATH' ansible_ssh_pipelining=True" > inventory.ini
           
           # Verify SSH config exists
           echo "SSH config path: $SSH_CONFIG_PATH"

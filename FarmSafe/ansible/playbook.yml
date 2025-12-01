@@ -29,10 +29,19 @@
         delay: 5
         timeout: 60
 
+    - name: Verify SSH connection is stable
+      ping:
+      retries: 3
+      delay: 5
+
     - name: Update package index (dnf)
       dnf:
         update_cache: yes
       become: yes
+      retries: 3
+      delay: 15
+      register: dnf_update_result
+      until: dnf_update_result is succeeded
 
     - name: Install required packages
       dnf:
@@ -41,6 +50,10 @@
           - docker
         state: present
       become: yes
+      retries: 3
+      delay: 10
+      register: dnf_install_result
+      until: dnf_install_result is succeeded
 
     # --- Docker Login and Service Tasks ---
 
