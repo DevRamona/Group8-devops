@@ -6,29 +6,12 @@ resource "aws_kms_key" "ecr" {
   tags = local.tags
 }
 
-resource "aws_ecr_repository" "app" {
-  name                 = lower("${local.project_name}-${local.environment}")
-  image_tag_mutability = var.container_image_mutability
-
-  image_scanning_configuration {
-    scan_on_push = var.container_scan_on_push
-  }
-
-  encryption_configuration {
-    encryption_type = "KMS"
-    kms_key         = aws_kms_key.ecr.arn
-  }
-
-  tags = merge(
-    local.tags,
-    {
-      Name = "${local.project_name}-${local.environment}-ecr"
-    },
-  )
+data "aws_ecr_repository" "app" {
+  name = "farmsafe-dev"
 }
 
 resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
+  repository = data.aws_ecr_repository.app.name
 
   policy = jsonencode({
     rules = [
