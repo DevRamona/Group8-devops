@@ -3,7 +3,6 @@ set -e
 
 # Install required packages
 dnf update -y
-dnf install -y docker nginx python3-pip unzip
 
 # Start and enable Docker
 systemctl start docker
