@@ -2,9 +2,11 @@
   become: yes
   vars:
     docker_registry: "{{ docker_registry | default('') }}"
-    docker_image: "{{ docker_image | default('') }}"
+    backend_image: "{{ backend_image | default('') }}"
+    frontend_image: "{{ frontend_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
     ecr_token: "{{ ecr_token | default('') }}"
+    jwt_secret: "{{ jwt_secret | default('') }}"
   tasks:
     - name: Update package index (dnf)
       dnf:
@@ -83,7 +85,7 @@
         mode: '0755'
 
     - name: Create production docker-compose file
-      when: docker_image != ""
+      when: backend_image != ""
       copy:
         content: |
           services:
@@ -104,14 +106,14 @@
                 retries: 5
 
             backend:
-              image: "{{ docker_image | quote }}"
+              image: "{{ backend_image | quote }}"
               container_name: farmsafe-backend
               restart: unless-stopped
               environment:
                 NODE_ENV: production
                 PORT: 5000
                 MONGO_URI: mongodb://mongodb:27017/farmsafe_db
-                JWT_SECRET: ${JWT_SECRET:-changeme}
+                JWT_SECRET: {{ jwt_secret | default('changeme') }}
               ports:
                 - "5000:5000"
               depends_on:
@@ -124,6 +126,16 @@
                 retries: 3
                 start_period: 10s
 
+            frontend:
+              image: "{{ frontend_image | quote }}"
+              container_name: farmsafe-frontend
+              restart: unless-stopped
+              ports:
+                - "80:80"
+              depends_on:
+                backend:
+                  condition: service_healthy
+
           volumes:
             mongodb_data:
               driver: local
@@ -132,18 +144,28 @@
         group: "{{ ansible_user }}"
         mode: '0644'
 
-    - name: Pull latest Docker image
-      when: docker_image != ""
-      shell: docker pull {{ docker_image | quote }}
+    - name: Pull backend Docker image
+      when: backend_image != ""
+      shell: docker pull {{ backend_image | quote }}
       become_user: "{{ ansible_user }}"
       environment:
         HOME: "/home/{{ ansible_user }}"
-      register: docker_pull
+      register: docker_pull_backend
+      retries: 3
+      delay: 5
+
+    - name: Pull frontend Docker image
+      when: frontend_image != ""
+      shell: docker pull {{ frontend_image | quote }}
+      become_user: "{{ ansible_user }}"
+      environment:
+        HOME: "/home/{{ ansible_user }}"
+      register: docker_pull_frontend
       retries: 3
       delay: 5
 
     - name: Stop existing containers
-      when: docker_image != ""
+      when: backend_image != ""
       shell: |
         if command -v docker-compose &> /dev/null; then
           docker-compose down
@@ -158,7 +180,7 @@
       ignore_errors: yes
 
     - name: Start services with docker-compose
-      when: docker_image != ""
+      when: backend_image != ""
       shell: |
         if command -v docker-compose &> /dev/null; then
           docker-compose up -d
@@ -172,7 +194,7 @@
         HOME: "/home/{{ ansible_user }}"
 
     - name: Verify services are running
-      when: docker_image != ""
+      when: backend_image != ""
       shell: |
         if command -v docker-compose &> /dev/null; then
           docker-compose ps
@@ -187,6 +209,6 @@
       register: compose_status
 
     - name: Display service status
-      when: docker_image != ""
+      when: backend_image != ""
       debug:
         msg: "{{ compose_status.stdout_lines }}"

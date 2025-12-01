@@ -15,6 +15,8 @@ env:
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'farmsafe-dev' }}
   APP_DOCKER_CONTEXT: FarmSafe
   DOCKERFILE_PATH: FarmSafe/Dockerfile
+  FRONTEND_DOCKER_CONTEXT: FarmSafe/frontend
+  FRONTEND_DOCKERFILE_PATH: FarmSafe/frontend/Dockerfile
 
 jobs:
   backend_ci:
@@ -127,18 +129,37 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image
-        id: build-and-push
+      - name: Build and push backend image
+        id: build-backend
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:backend-${{ env.IMAGE_TAG }}
+          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:backend-latest
 
           docker build \
             -f $DOCKERFILE_PATH \
             -t $IMAGE_URI \
             $APP_DOCKER_CONTEXT
+
+          docker tag $IMAGE_URI $LATEST_URI
+          docker push $IMAGE_URI
+          docker push $LATEST_URI
+
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push frontend image
+        id: build-frontend
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:frontend-${{ env.IMAGE_TAG }}
+          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:frontend-latest
+
+          docker build \
+            -f $FRONTEND_DOCKERFILE_PATH \
+            -t $IMAGE_URI \
+            $FRONTEND_DOCKER_CONTEXT
 
           docker tag $IMAGE_URI $LATEST_URI
           docker push $IMAGE_URI
@@ -153,12 +174,30 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install ansible
 
+      - name: Get bastion host IP
+        id: bastion-ip
+        run: |
+          BASTION_IP=$(aws ec2 describe-instances \
+            --region ${{ env.AWS_REGION }} \
+            --filters "Name=tag:Name,Values=farmsafe-dev-bastion" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "bastion_ip=$BASTION_IP" >> "$GITHUB_OUTPUT"
+          echo "Bastion host IP: $BASTION_IP"
+
       - name: Prepare SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          echo "app ansible_host=${{ secrets.ANSIBLE_HOST }} ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > inventory.ini
+          
+          # Configure SSH to use Bastion as Jump Host
+          BASTION_IP=${{ steps.bastion-ip.outputs.bastion_ip }}
+          SSH_USER=${{ secrets.ANSIBLE_USER }}
+          
+          PROXY_CMD="ssh -o StrictHostKeyChecking=no -W %h:%p -i ~/.ssh/id_rsa $SSH_USER@$BASTION_IP"
+          
+          echo "app ansible_host=${{ secrets.ANSIBLE_HOST }} ansible_user=$SSH_USER ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand=\"$PROXY_CMD\"'" > inventory.ini
 
       - name: Debug inventory
         run: |
@@ -181,7 +220,7 @@ jobs:
         run: |
           ansible-playbook \
             -i inventory.ini \
-            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }}" \
+            --extra-vars "docker_registry=$REGISTRY backend_image=${{ steps.build-backend.outputs.image_uri }} frontend_image=${{ steps.build-frontend.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }} jwt_secret=${{ secrets.JWT_SECRET }}" \
             FarmSafe/ansible/playbook.yml
 
       - name: Get app instance private IP
@@ -194,17 +233,6 @@ jobs:
             --output text)
           echo "app_private_ip=$APP_IP" >> "$GITHUB_OUTPUT"
           echo "App instance private IP: $APP_IP"
-
-      - name: Get bastion host IP
-        id: bastion-ip
-        run: |
-          BASTION_IP=$(aws ec2 describe-instances \
-            --region ${{ env.AWS_REGION }} \
-            --filters "Name=tag:Name,Values=farmsafe-dev-bastion" "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].PublicIpAddress' \
-            --output text)
-          echo "bastion_ip=$BASTION_IP" >> "$GITHUB_OUTPUT"
-          echo "Bastion host IP: $BASTION_IP"
 
       - name: Prepare bastion inventory
         run: |
