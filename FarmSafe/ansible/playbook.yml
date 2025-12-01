@@ -6,6 +6,17 @@
     docker_image: "{{ docker_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
   tasks:
+    # FIX for DNF Lock Conflict with User Data
+    # Removes potential lock files left over by the user-data script's dnf operations.
+    # This prevents the subsequent dnf task from hanging and terminating the SSH connection (Error 255).
+    - name: Ensure DNF lock is removed
+      ansible.builtin.shell: |
+        rm -f /var/cache/dnf/*/*.lock
+        rm -f /var/run/dnf.pid
+      args:
+        warn: false
+      failed_when: false # Allow this task to fail if files don't exist
+
     # Amazon Linux 2023 uses dnf as package manager
     - name: Update package index (dnf)
       dnf:
