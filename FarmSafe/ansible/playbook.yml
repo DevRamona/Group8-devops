@@ -14,11 +14,9 @@
     # We use the explicit 'cmd' key within the 'shell' module to prevent Ansible 
     # from incorrectly falling back to the 'command' module.
     - name: Ensure DNF lock is removed (Force Shell Module)
-      shell:
-        cmd: |
-          rm -f /var/cache/dnf/*/*.lock
-          rm -f /var/run/dnf.pid
-        warn: false # This argument is now correctly passed to the shell module
+      shell: |
+        rm -f /var/cache/dnf/*/*.lock
+        rm -f /var/run/dnf.pid
       failed_when: false # Allows this task to pass even if the files don't exist
       become: yes
 
@@ -32,6 +30,8 @@
       dnf:
         update_cache: yes
       become: yes
+      retries: 3
+      delay: 10
 
     - name: Install required packages
       dnf:
