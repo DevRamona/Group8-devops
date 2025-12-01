@@ -10,7 +10,7 @@ private_subnet_cidrs = [
   "10.0.101.0/24",
   "10.0.102.0/24",
 ]
-allowed_ssh_cidr           = "129.222.149.172/32"
+allowed_ssh_cidr           = "0.0.0.0/0"
 key_name                   = "farmsafe-key-3"
 bastion_instance_type      = "t3.micro"
 app_instance_type          = "t3.small"
