@@ -176,10 +176,6 @@ jobs:
           ansible-galaxy collection install community.aws
           ansible-galaxy collection install community.docker
 
-      - name: Install Ansible Collections (Fix for ECR Login)
-        run: |
-          ansible-galaxy collection install community.aws
-
       - name: Get bastion host IP
         id: bastion-ip-for-ssh
         run: |
@@ -268,8 +264,14 @@ jobs:
           cat inventory.ini
           echo "================================="
 
-      - name: Wait for instances to be ready
-        run: sleep 60
+      - name: Get ECR login token
+        id: ecr-token
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          ECR_TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
+          echo "token=$ECR_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
 
       - name: Run Ansible playbook
         env:
@@ -278,9 +280,8 @@ jobs:
           ansible-playbook \
             -vvv \
             -i inventory.ini \
-            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }}" \
+            --extra-vars "docker_registry=$REGISTRY backend_image=${{ steps.build-backend.outputs.image_uri }} frontend_image=${{ steps.build-frontend.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }} jwt_secret=${{ secrets.JWT_SECRET }}" \
             FarmSafe/ansible/playbook.yml
-
 
       - name: Prepare bastion inventory
         run: |
@@ -289,7 +290,7 @@ jobs:
           echo "bastion ansible_host=bastion ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -F $SSH_CONFIG_PATH'" > bastion-inventory.ini
 
       - name: Configure nginx on bastion
-        if: steps.app-ip.outputs.app_private_ip != ''
+        if: steps.app-private-ip-for-ssh.outputs.app_private_ip != ''
         run: |
           ansible-playbook \
             -i bastion-inventory.ini \
