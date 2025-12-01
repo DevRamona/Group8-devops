@@ -6,11 +6,10 @@
     docker_image: "{{ docker_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
   tasks:
-    # FIX for DNF Lock Conflict with User Data
-    # Removes potential lock files left over by the user-data script's dnf operations.
-    # This prevents the subsequent dnf task from hanging and terminating the SSH connection (Error 255).
+    # 🩹 FIX for DNF Lock Conflict with User Data
+    # Using explicit 'shell' module syntax to avoid Ansible incorrectly resolving to 'command'
     - name: Ensure DNF lock is removed
-      ansible.builtin.shell: |
+      shell: |
         rm -f /var/cache/dnf/*/*.lock
         rm -f /var/run/dnf.pid
       args:
