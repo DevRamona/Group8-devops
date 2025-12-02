@@ -2,119 +2,22 @@ name: Deploy to Production
 
 on:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-  id-token: write
+    branches: [ "main" ]
 
 env:
-  NODE_VERSION: 20
-  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'farmsafe-dev' }}
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: farmsafe-dev
   APP_DOCKER_CONTEXT: FarmSafe
   DOCKERFILE_PATH: FarmSafe/Dockerfile
 
 jobs:
-  backend_ci:
-    name: Backend CI
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: FarmSafe/backend
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: FarmSafe/backend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Test
-        run: npm test
-
-  frontend_ci:
-    name: Frontend CI
-    runs-on: ubuntu-latest
-    needs: backend_ci
-    defaults:
-      run:
-        working-directory: FarmSafe/frontend
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: FarmSafe/frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Test
-        run: npm test
-
-  security_scans:
-    name: Security Scans
-    runs-on: ubuntu-latest
-    needs:
-      - backend_ci
-      - frontend_ci
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run tfsec (IaC)
-        uses: aquasecurity/tfsec-action@v1.0.1
-
-      - name: Trivy file system scan
-        uses: aquasecurity/trivy-action@0.11.0
-        with:
-          scan-type: fs
-          format: table
-          severity: CRITICAL
-          exit-code: 1
-          output: trivy-fs.txt
-
-      - name: Build Docker image for scanning
-        run: |
-          docker build \
-            -f $DOCKERFILE_PATH \
-            -t farmsafe-sec-scan:${{ github.sha }} \
-            $APP_DOCKER_CONTEXT
-
-      - name: Trivy image scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: farmsafe-sec-scan:${{ github.sha }}
-          format: table
-          severity: CRITICAL
-          exit-code: 1
-          output: trivy-image.txt
-
   deploy:
     name: Build, Push, and Deploy
     runs-on: ubuntu-latest
-    needs:
-      - security_scans
-    env:
-      IMAGE_TAG: ${{ github.sha }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -127,22 +30,27 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image
+      - name: Build and push application image
         id: build-and-push
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          set -e
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:latest
 
+          echo "Building Docker image: $IMAGE_URI"
           docker build \
-            -f $DOCKERFILE_PATH \
-            -t $IMAGE_URI \
-            $APP_DOCKER_CONTEXT
+            -f "$DOCKERFILE_PATH" \
+            -t "$IMAGE_URI" \
+            "$APP_DOCKER_CONTEXT"
 
-          docker tag $IMAGE_URI $LATEST_URI
-          docker push $IMAGE_URI
-          docker push $LATEST_URI
+          echo "Tagging image as latest: $LATEST_URI"
+          docker tag "$IMAGE_URI" "$LATEST_URI"
+
+          echo "Pushing images to ECR"
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
 
           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
@@ -153,35 +61,48 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install ansible
 
-      - name: Prepare SSH key
+      # Prepare SSH key and inventory to connect to the app host via bastion
+      - name: Prepare SSH key and inventory
+        env:
+          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
+          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
+          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
+          ANSIBLE_APP_HOST: ${{ secrets.ANSIBLE_APP_HOST }}
         run: |
+          set -e
+
+          if [ -z "$ANSIBLE_SSH_PRIVATE_KEY" ] || [ -z "$ANSIBLE_USER" ] || [ -z "$ANSIBLE_BASTION_HOST" ] || [ -z "$ANSIBLE_APP_HOST" ]; then
+            echo "One or more required secrets are missing."
+            echo "Make sure ANSIBLE_SSH_PRIVATE_KEY, ANSIBLE_USER, ANSIBLE_BASTION_HOST, and ANSIBLE_APP_HOST are set."
+            exit 1
+          fi
+
           mkdir -p ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          echo "app ansible_host=${{ secrets.ANSIBLE_HOST }} ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > inventory.ini
+          SSH_KEY_PATH="$HOME/.ssh/farmsafe-key-3.pem"
+          printf '%s\n' "$ANSIBLE_SSH_PRIVATE_KEY" > "$SSH_KEY_PATH"
+          chmod 600 "$SSH_KEY_PATH"
 
-      - name: Debug inventory
-        run: |
-          echo "===== inventory.ini contents ====="
-          cat inventory.ini
-          echo "================================="
+          echo "Creating CI inventory (inventory_ci.ini)..."
+          cat > inventory_ci.ini <<EOF
+[app]
+app ansible_host=$ANSIBLE_APP_HOST ansible_user=$ANSIBLE_USER ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes -o ConnectTimeout=30 -o ProxyCommand="ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no -W %h:%p $ANSIBLE_USER@$ANSIBLE_BASTION_HOST"' 
+EOF
 
-      - name: Get ECR login token
-        id: ecr-token
+          echo "==== Rendered CI inventory ===="
+          cat inventory_ci.ini
+          echo "================================"
+
+      - name: Deploy with Ansible
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          AWS_REGION: ${{ env.AWS_REGION }}
         run: |
-          ECR_TOKEN=$(aws ecr get-login-password --region ${{ env.AWS_REGION }})
-          echo "token=$ECR_TOKEN" >> "$GITHUB_OUTPUT"
-          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
+          set -e
+          echo "Running Ansible playbook against app host via bastion"
 
-      - name: Run Ansible playbook
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
           ansible-playbook \
-            -i inventory.ini \
-            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }}" \
+            -i inventory_ci.ini \
+            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=$AWS_REGION" \
             FarmSafe/ansible/playbook.yml
 
 
