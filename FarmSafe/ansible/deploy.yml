@@ -1,0 +1,100 @@
+---
+- hosts: all
+  become: yes
+  vars:
+    app_dir: /home/ec2-user/Group8-devops/FarmSafe
+    repo_url: https://github.com/DevRamona/Group8-devops.git
+    jwt_secret: "{{ jwt_secret | default('NpsiWFUjKz69cXxHav1l3nEmbq57uDVw') }}"
+  
+  tasks:
+    - name: Ensure git is installed
+      dnf:
+        name: git
+        state: present
+
+    - name: Check if repository directory exists
+      stat:
+        path: "{{ app_dir }}"
+      register: repo_dir
+
+    - name: Clone repository if it doesn't exist
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: main
+      when: not repo_dir.stat.exists
+
+    - name: Update repository to latest code
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: main
+      when: repo_dir.stat.exists
+
+    - name: Create .env file
+      copy:
+        content: |
+          JWT_SECRET={{ jwt_secret }}
+          MONGO_URI=mongodb://mongodb:27017/farmsafe_db
+          NODE_ENV=production
+        dest: "{{ app_dir }}/.env"
+        mode: '0644'
+
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Stop existing containers
+      command: docker compose down
+      args:
+        chdir: "{{ app_dir }}"
+      ignore_errors: yes
+
+    - name: Build and start containers
+      command: docker compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Wait for services to be healthy
+      wait_for:
+        timeout: 30
+      delegate_to: localhost
+
+    - name: Verify containers are running
+      command: docker compose ps
+      args:
+        chdir: "{{ app_dir }}"
+      register: container_status
+      changed_when: false
+
+    - name: Display container status
+      debug:
+        var: container_status.stdout_lines
+
+    - name: Check backend health
+      uri:
+        url: http://localhost:5000
+        method: GET
+        status_code: [200, 404]
+      register: backend_health
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Check frontend health
+      uri:
+        url: http://localhost
+        method: GET
+        status_code: [200, 404]
+      register: frontend_health
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Display deployment status
+      debug:
+        msg:
+          - "Backend health: {{ 'OK' if backend_health.status == 200 else 'Failed' }}"
+          - "Frontend health: {{ 'OK' if frontend_health.status == 200 else 'Failed' }}"
+          - "Deployment complete!"
+

@@ -2,107 +2,97 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [ "main" ]
-
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: farmsafe-dev
-  APP_DOCKER_CONTEXT: FarmSafe
-  DOCKERFILE_PATH: FarmSafe/Dockerfile
+    branches:
+      - main
+  workflow_dispatch: # Allow manual triggering
 
 jobs:
   deploy:
-    name: Build, Push, and Deploy
     runs-on: ubuntu-latest
-
+    if: github.ref == 'refs/heads/main'
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push application image
-        id: build-and-push
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      - name: Configure SSH
         run: |
-          set -e
-          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:latest
-
-          echo "Building Docker image: $IMAGE_URI"
-          docker build \
-            -f "$DOCKERFILE_PATH" \
-            -t "$IMAGE_URI" \
-            "$APP_DOCKER_CONTEXT"
-
-          echo "Tagging image as latest: $LATEST_URI"
-          docker tag "$IMAGE_URI" "$LATEST_URI"
-
-          echo "Pushing images to ECR"
-          docker push "$IMAGE_URI"
-          docker push "$LATEST_URI"
-
-          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
-
-      - name: Install Ansible
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-pip
-          python3 -m pip install --upgrade pip
-          pip install ansible
-
-      # Prepare SSH key and inventory to connect to the app host via bastion
-      - name: Prepare SSH key and inventory
-        env:
-          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
-          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
-          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
-          ANSIBLE_APP_HOST: ${{ secrets.ANSIBLE_APP_HOST }}
-        run: |
-          set -e
-
-          if [ -z "$ANSIBLE_SSH_PRIVATE_KEY" ] || [ -z "$ANSIBLE_USER" ] || [ -z "$ANSIBLE_BASTION_HOST" ] || [ -z "$ANSIBLE_APP_HOST" ]; then
-            echo "One or more required secrets are missing."
-            echo "Make sure ANSIBLE_SSH_PRIVATE_KEY, ANSIBLE_USER, ANSIBLE_BASTION_HOST, and ANSIBLE_APP_HOST are set."
-            exit 1
-          fi
-
           mkdir -p ~/.ssh
-          SSH_KEY_PATH="$HOME/.ssh/farmsafe-key-3.pem"
-          printf '%s\n' "$ANSIBLE_SSH_PRIVATE_KEY" > "$SSH_KEY_PATH"
-          chmod 600 "$SSH_KEY_PATH"
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.ANSIBLE_BASTION_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.ANSIBLE_APP_HOST }} >> ~/.ssh/known_hosts
 
-          echo "Creating CI inventory (inventory_ci.ini)..."
-          cat > inventory_ci.ini <<EOF
-[app]
-app ansible_host=$ANSIBLE_APP_HOST ansible_user=$ANSIBLE_USER ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes -o ConnectTimeout=30 -o ProxyCommand="ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no -W %h:%p $ANSIBLE_USER@$ANSIBLE_BASTION_HOST"'
-EOF
-
-          echo "==== Rendered CI inventory ===="
-          cat inventory_ci.ini
-          echo "================================"
-
-      - name: Deploy with Ansible
+      - name: Deploy to EC2
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          AWS_REGION: ${{ env.AWS_REGION }}
+          BASTION_IP: ${{ secrets.ANSIBLE_BASTION_HOST }}
+          APP_PRIVATE_IP: ${{ secrets.ANSIBLE_APP_HOST }}
+          SSH_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
         run: |
-          set -e
-          echo "Running Ansible playbook against app host via bastion"
+          # Create SSH config for jump host
+          cat > ~/.ssh/config << EOF
+          Host bastion
+            HostName ${BASTION_IP}
+            User ec2-user
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
 
-          ansible-playbook \
-            -i inventory_ci.ini \
-            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=$AWS_REGION" \
-            FarmSafe/ansible/playbook.yml
+          Host app
+            HostName ${APP_PRIVATE_IP}
+            User ec2-user
+            IdentityFile ~/.ssh/deploy_key
+            ProxyJump bastion
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 ~/.ssh/config
 
+          # Deploy to app instance
+          ssh app << 'DEPLOY_SCRIPT'
+            set -e
+            cd ~/Group8-devops/FarmSafe
+            
+            # Pull latest code
+            echo "Pulling latest code..."
+            git pull origin main
+            
+            # Rebuild and restart containers
+            echo "Rebuilding containers..."
+            docker compose down
+            docker compose build --no-cache
+            docker compose up -d
+            
+            # Wait for services to be healthy
+            echo "Waiting for services to start..."
+            sleep 10
+            
+            # Verify deployment
+            echo "Verifying deployment..."
+            docker compose ps
+            
+            # Check if services are responding
+            if curl -f http://localhost:5000 > /dev/null 2>&1; then
+              echo "Backend is responding"
+            else
+              echo "Backend health check failed"
+            fi
+            
+            if curl -f http://localhost > /dev/null 2>&1; then
+              echo "Frontend is responding"
+            else
+              echo "Frontend health check failed"
+            fi
+            
+            echo "Deployment complete!"
+          DEPLOY_SCRIPT
+
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Application deployed successfully to production" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Application URL:** http://farmsafe-dev-alb-1865447178.us-east-1.elb.amazonaws.com/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Author:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
 

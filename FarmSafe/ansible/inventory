@@ -1,1 +1,5 @@
-localhost ansible_connection=local
+[servers]
+app-server ansible_host=10.0.1.169 ansible_user=ec2-user ansible_ssh_private_key_file=C:/Users/Ramona Ingabire/.ssh/farmsafe-key-3.pem
+
+[servers:vars]
+ansible_ssh_common_args='-o ProxyJump=ec2-user@3.232.86.51 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
