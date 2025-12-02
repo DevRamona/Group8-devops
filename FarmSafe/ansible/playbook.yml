@@ -32,11 +32,18 @@
       become: yes
       retries: 3
       delay: 10
+    - name: Check availability of required packages
+      shell: dnf list available python3-pip unzip 2>/dev/null || echo "Packages not found"
+      register: package_check
+      become: yes
+
+    - name: Debug package availability
+      debug:
+        msg: "{{ package_check.stdout }}"
 
     - name: Install required packages
       dnf:
         name:
-          - python3-pip
           - docker
         state: present
       become: yes
