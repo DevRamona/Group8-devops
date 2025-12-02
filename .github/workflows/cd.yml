@@ -56,9 +56,17 @@ jobs:
             set -e
             cd ~/Group8-devops/FarmSafe
             
+            # Handle local changes before pulling
+            echo "Checking for local changes..."
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "Stashing local changes..."
+              git stash push -m "Stashed before deployment $(date +%Y%m%d_%H%M%S)"
+            fi
+            
             # Pull latest code
             echo "Pulling latest code..."
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
             
             # Rebuild and restart containers
             echo "Rebuilding containers..."
