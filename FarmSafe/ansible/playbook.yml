@@ -1,25 +1,29 @@
 ---
-- hosts: all
+- name: Configure Application Server
+  hosts: all
   become: yes
   vars:
-    # These variables are passed in via --extra-vars
-    docker_registry: "{{ docker_registry | default('') }}"
-    backend_image: "{{ backend_image | default('') }}"
-    frontend_image: "{{ frontend_image | default('') }}"
-    aws_region: "{{ aws_region | default('us-east-1') }}"
+    # Default variables (can be overridden by --extra-vars)
+    docker_registry: ""
+    backend_image: ""
+    frontend_image: ""
+    aws_region: "us-east-1"
+    jwt_secret: "changeme"
 
   tasks:
-    # --- Swap File Setup (Fix for OOM on t3.small) ---
-    - name: Check if swap file exists
+    # -------------------------------------------------------------------------
+    # 1. System Preparation & Swap (Crucial for small instances like t3.small)
+    # -------------------------------------------------------------------------
+    - name: Check for existing swap file
       stat:
         path: /swapfile
       register: swap_file
 
-    - name: Create swap file
+    - name: Create swap file (2GB)
       command: dd if=/dev/zero of=/swapfile bs=128M count=16
       when: not swap_file.stat.exists
 
-    - name: Set swap file permissions
+    - name: Set swap permissions
       file:
         path: /swapfile
         mode: '0600'
@@ -29,72 +33,25 @@
       command: mkswap /swapfile
       when: not swap_file.stat.exists
 
-    - name: Enable swap file
+    - name: Enable swap
       command: swapon /swapfile
       when: not swap_file.stat.exists
 
-    # --- System Setup Tasks ---
-
-    # Aggressively clear any stuck DNF processes or locks
-    - name: Kill any existing DNF processes
-      shell: "pkill -9 dnf || true"
-      ignore_errors: yes
-
-    - name: Remove DNF lock files
-      shell: "rm -f /var/lib/rpm/.dbenv.lock /var/lib/rpm/__db.* /var/cache/dnf/*/*.lock /var/run/dnf.pid"
-      ignore_errors: yes
-
-    - name: Wait for SSH connection to stabilize
-      wait_for_connection:
-        delay: 5
-        timeout: 60
-
-    - name: Update package index (dnf)
+    # -------------------------------------------------------------------------
+    # 2. Install Docker & Dependencies
+    # -------------------------------------------------------------------------
+    - name: Update all packages
       dnf:
+        name: "*"
+        state: latest
         update_cache: yes
-        lock_timeout: 180
-      register: dnf_update
-      retries: 5
-      delay: 10
-      until: dnf_update is succeeded
 
-    - name: Install required packages (dnf)
+    - name: Install Docker and Git
       dnf:
         name:
           - docker
-          - unzip
-          # python3-pip removed here as it causes errors on AL2023
+          - git
         state: present
-        lock_timeout: 180
-      register: dnf_install
-      retries: 5
-      delay: 10
-      until: dnf_install is succeeded
-
-    # FIXED: Install pip via Python module since the RPM package is missing
-    - name: Ensure pip is installed via ensurepip
-      command: python3 -m ensurepip --upgrade
-      changed_when: false
-
-    # FIXED: Install Docker Compose to /usr/local/bin so it is in $PATH
-    - name: Install Docker Compose (Standalone Binary)
-      get_url:
-        url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{{ ansible_architecture }}"
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
-
-    - name: Create Docker CLI plugins directory
-      file:
-        path: /usr/local/lib/docker/cli-plugins
-        state: directory
-        mode: '0755'
-
-    # FIXED: Symlink the binary to the plugin dir so 'docker compose' works too
-    - name: Link Docker Compose as CLI plugin
-      file:
-        src: /usr/local/bin/docker-compose
-        dest: /usr/local/lib/docker/cli-plugins/docker-compose
-        state: link
 
     - name: Start and enable Docker service
       service:
@@ -104,53 +61,39 @@
 
     - name: Add user to docker group
       user:
-        name: "{{ ansible_user }}"
+        name: "{{ ansible_user | default('ec2-user') }}"
         groups: docker
         append: yes
 
-    - name: Install AWS CLI
-      shell: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip -q awscliv2.zip
-        ./aws/install
-        rm -rf aws awscliv2.zip
-      args:
-        creates: /usr/local/bin/aws
+    # -------------------------------------------------------------------------
+    # 3. Install Docker Compose (Standalone)
+    # -------------------------------------------------------------------------
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{{ ansible_architecture }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
 
-    - name: Configure ECR login using provided token
-      when: docker_registry != "" and ecr_token != ""
-      shell: |
-        echo "{{ ecr_token }}" | docker login --username AWS --password-stdin {{ docker_registry }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: ecr_login_token
-      changed_when: false
-      no_log: true
-
-    - name: Configure ECR login using IAM role (fallback)
-      when: docker_registry != "" and ecr_token == ""
-      shell: |
-        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ docker_registry }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        AWS_DEFAULT_REGION: "{{ aws_region }}"
-        HOME: "/home/{{ ansible_user }}"
-      register: ecr_login_iam
-      changed_when: false
-      failed_when: ecr_login_iam.rc != 0
-
+    # -------------------------------------------------------------------------
+    # 4. Application Deployment
+    # -------------------------------------------------------------------------
     - name: Create application directory
       file:
         path: /opt/farmsafe
         state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
+        owner: "{{ ansible_user | default('ec2-user') }}"
+        group: "{{ ansible_user | default('ec2-user') }}"
         mode: '0755'
 
-    - name: Create production docker-compose file
-      when: backend_image != ""
+    - name: Log in to ECR
+      when: docker_registry != "" and ecr_token is defined
+      shell: |
+        echo "{{ ecr_token }}" | docker login --username AWS --password-stdin {{ docker_registry }}
+      no_log: true
+
+    - name: Generate docker-compose.yml
       copy:
+        dest: /opt/farmsafe/docker-compose.yml
         content: |
           services:
             mongodb:
@@ -170,14 +113,14 @@
                 retries: 5
 
             backend:
-              image: "{{ backend_image | quote }}"
+              image: "{{ backend_image }}"
               container_name: farmsafe-backend
               restart: unless-stopped
               environment:
                 NODE_ENV: production
                 PORT: 5000
                 MONGO_URI: mongodb://mongodb:27017/farmsafe_db
-                JWT_SECRET: {{ jwt_secret | default('changeme') }}
+                JWT_SECRET: "{{ jwt_secret }}"
               ports:
                 - "5000:5000"
               depends_on:
@@ -191,7 +134,7 @@
                 start_period: 10s
 
             frontend:
-              image: "{{ frontend_image | quote }}"
+              image: "{{ frontend_image }}"
               container_name: farmsafe-frontend
               restart: unless-stopped
               ports:
@@ -203,76 +146,18 @@
           volumes:
             mongodb_data:
               driver: local
-        dest: /opt/farmsafe/docker-compose.yml
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0644'
 
-    - name: Pull backend Docker image
-      when: backend_image != ""
-      shell: docker pull {{ backend_image | quote }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: docker_pull_backend
-      retries: 3
-      delay: 5
-
-    - name: Pull frontend Docker image
-      when: frontend_image != ""
-      shell: docker pull {{ frontend_image | quote }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: docker_pull_frontend
-      retries: 3
-      delay: 5
-
-    - name: Stop existing containers
-      when: backend_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose down
-        else
-          docker compose down
-        fi
+    - name: Pull Docker images
+      command: docker-compose pull
       args:
         chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      ignore_errors: yes
+      when: backend_image != "" and frontend_image != ""
 
-    - name: Start services with docker-compose
-      when: backend_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose up -d
-        else
-          docker compose up -d
-        fi
+    - name: Start Application Stack
+      command: docker-compose up -d
       args:
         chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
+      when: backend_image != "" and frontend_image != ""
 
-    - name: Verify services are running
-      when: backend_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose ps
-        else
-          docker compose ps
-        fi
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: compose_status
-
-    - name: Display service status
-      when: backend_image != ""
-      debug:
-        msg: "{{ compose_status.stdout_lines }}"
+    - name: Prune unused Docker images
+      command: docker image prune -f
