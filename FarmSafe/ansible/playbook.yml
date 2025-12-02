@@ -31,6 +31,25 @@
     - name: Enable swap file
       command: swapon /swapfile
       when: not swap_file.stat.exists
+    - name: Check if pip3 is installed
+      command: which pip3
+      register: pip_check
+      ignore_errors: yes
+
+    - name: Check if unzip is installed
+      command: which unzip
+      register: unzip_check
+      ignore_errors: yes
+
+    - name: Debug pip check
+      debug:
+        msg: "pip3 check: {{ pip_check }}"
+
+    - name: Debug unzip check
+      debug:
+        msg: "unzip check: {{ unzip_check }}"
+
+    # --- System Setup Tasks ---
 
     # --- System Setup Tasks ---
     - name: Update package index (dnf)
@@ -41,8 +60,6 @@
       dnf:
         name:
           - docker
-          - python3-pip
-          - unzip
         state: present
 
     - name: Create Docker CLI plugins directory
@@ -70,13 +87,10 @@
         append: yes
 
     - name: Install AWS CLI
-      shell: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip -q awscliv2.zip
-        ./aws/install
-        rm -rf aws awscliv2.zip
-      args:
-        creates: /usr/local/bin/aws
+      pip:
+        name: awscli
+        executable: pip3
+        state: present
 
     - name: Configure ECR login using provided token
       when: docker_registry != "" and ecr_token != ""
