@@ -9,10 +9,8 @@
     aws_region: "{{ aws_region | default('us-east-1') }}"
     ecr_token: "{{ ecr_token | default('') }}"
     jwt_secret: "{{ jwt_secret | default('changeme') }}"
-
   tasks:
     # --- System Preparation Tasks (Swap File) ---
-
     - name: Check if swap file exists
       stat:
         path: /swapfile
@@ -38,9 +36,6 @@
 
     # --- System Setup Tasks (Package Installation) ---
 
-    # NOTE: The manual `which pip3`/`which unzip` checks and debug tasks are removed.
-    # The fix is to ensure these packages are installed first.
-
     - name: Update package index (dnf)
       dnf:
         update_cache: yes
@@ -49,11 +44,10 @@
     - name: Install required system packages (Docker, Python/Pip, Utilities)
       dnf:
         name:
-          - python3-pip           # <--- FIX: Essential for the `pip` module to work
+          - python3-pip           # Try with python3-pip first
           - docker
-          - unzip                 # <--- FIX: Ensure unzip is available (if needed)
-          - python3-dnf-plugin-versionlock
-          - docker-compose-plugin # <--- FIX: Install modern Docker Compose CLI plugin
+          - unzip                 # Likely still available
+          - docker-compose-plugin # Likely still available
         state: present
       become: yes
 
@@ -64,15 +58,12 @@
         mode: '0755'
       become: yes
 
-    # The original "Install Docker Compose" task is REMOVED because 
-    # the package is installed via DNF above.
-
     - name: Install Python required packages (awscli and docker-py)
       pip:
         name:
           - awscli
           - docker
-          - boto3 # Adding boto3 as it is often required for AWS modules/tasks
+          - boto3
         executable: pip3
         state: present
       become: yes
@@ -92,9 +83,6 @@
         groups: docker
         append: yes
       become: yes
-      # NOTE: This change may require reconnecting or running a separate play to take effect.
-      # However, since subsequent tasks use `become_user` with `environment: {HOME: ...}`, 
-      # the manual login steps below usually succeed without a full logout/login cycle.
 
     - name: Configure ECR login using provided token
       when: docker_registry != "" and ecr_token != ""
@@ -106,8 +94,6 @@
       register: ecr_login_token
       changed_when: false
       no_log: true
-      # NOTE: This task handles login, eliminating the need for `community.aws.ecr_login`
-      # if you provide the ECR token from the CI/CD pipeline.
 
     - name: Configure ECR login using IAM role (fallback)
       when: docker_registry != "" and ecr_token == ""
@@ -191,10 +177,7 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
-      become: yes # Use become to ensure permissions are set correctly
-
-    # NOTE: Shell pull tasks are okay, but use the full `docker compose` binary/plugin path if possible
-    # or ensure the path is available, which the DNF install should handle.
+      become: yes
 
     - name: Pull backend Docker image
       when: backend_image != ""
@@ -218,7 +201,7 @@
 
     - name: Stop existing containers
       when: backend_image != ""
-      shell: docker compose down # Rely on DNF installed `docker compose` plugin/binary
+      shell: docker compose down
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -228,7 +211,7 @@
 
     - name: Start services with docker-compose
       when: backend_image != ""
-      shell: docker compose up -d # Rely on DNF installed `docker compose` plugin/binary
+      shell: docker compose up -d
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -237,7 +220,7 @@
 
     - name: Verify services are running
       when: backend_image != ""
-      shell: docker compose ps # Rely on DNF installed `docker compose` plugin/binary
+      shell: docker compose ps
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
