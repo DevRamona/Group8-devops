@@ -9,7 +9,6 @@
     aws_region: "{{ aws_region | default('us-east-1') }}"
     ecr_token: "{{ ecr_token | default('') }}"
     jwt_secret: "{{ jwt_secret | default('changeme') }}"
-    ansible_user: "{{ ansible_user }}" # Ensure user is accessible
 
   tasks:
     # --- System Preparation Tasks (Swap File) ---
