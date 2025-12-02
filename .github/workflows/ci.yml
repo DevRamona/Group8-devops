@@ -28,9 +28,7 @@ jobs:
       - name: test
         working-directory: FarmSafe/backend
         run: npm test
-      - name: docker build
-        working-directory: FarmSafe
-        run: docker build -f Dockerfile -t farmsafe-backend-ci .
+
 
   frontend:
     runs-on: ubuntu-latest
@@ -53,9 +51,6 @@ jobs:
       - name: test
         working-directory: FarmSafe/frontend
         run: npm test
-      - name: docker build
-        working-directory: FarmSafe/frontend
-        run: docker build -t farmsafe-frontend-ci .
 
   compose:
     runs-on: ubuntu-latest
