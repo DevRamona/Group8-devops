@@ -29,7 +29,7 @@ const Login: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center">🌿</div>
             <div className="font-extrabold text-xl tracking-tight">FarmSafe</div>
           </div>
-          <p className="text-gray-700 mb-1">Welcome</p>
+          <p className="text-gray-600 mb-1">Welcome</p>
           <h2 className="text-4xl font-bold mb-8">Log In</h2>
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
