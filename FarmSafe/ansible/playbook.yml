@@ -68,11 +68,13 @@
         state: directory
         mode: '0755'
 
+
     - name: Install Docker Compose plugin
       get_url:
         url: https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
         dest: /usr/local/lib/docker/cli-plugins/docker-compose
         mode: '0755'
+        timeout: 60
 
     - name: Start and enable Docker service
       service:
