@@ -153,97 +153,17 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install ansible
 
-      - name: Prepare SSH key and inventory (via bastion)
+      - name: Prepare SSH key
         run: |
-          set -e
           mkdir -p ~/.ssh
-          SSH_KEY_PATH="$HOME/.ssh/farmsafe-key-3.pem"
-
-          # Write private key from GitHub secret
-          printf '%s\n' "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > "$SSH_KEY_PATH"
-          chmod 600 "$SSH_KEY_PATH"
-
-          # Create inventory that connects to app via bastion jump host
-          cat > inventory.ini << 'EOF'
-[farmsafe_app]
-app ansible_host=${ANSIBLE_APP_HOST} ansible_user=${ANSIBLE_USER} \
-  ansible_ssh_private_key_file=${SSH_KEY_PATH} \
-  ansible_ssh_common_args='-vvv -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o TCPKeepAlive=yes -o ConnectTimeout=30 -o ProxyCommand="ssh -vvv -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no -W %h:%p ${ANSIBLE_USER}@${ANSIBLE_BASTION_HOST}"'
-EOF
-
-      - name: Debug - Test bastion connectivity
-        env:
-          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
-          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
-        run: |
-          echo "=========================================="
-          echo "Testing connection to bastion"
-          echo "User: $ANSIBLE_USER"
-          echo "Host: $ANSIBLE_BASTION_HOST"
-          echo "=========================================="
-          timeout 30 ssh -vvv \
-            -i ~/.ssh/farmsafe-key-3.pem \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=10 \
-            $ANSIBLE_USER@$ANSIBLE_BASTION_HOST \
-            "echo 'Bastion connection successful' && hostname && whoami" || {
-              echo "ERROR: Cannot connect to bastion host!"
-              echo "This usually means:"
-              echo "1. Bastion security group doesn't allow SSH from GitHub Actions IPs"
-              echo "2. Bastion instance is not running"
-              echo "3. Wrong bastion IP address"
-              exit 1
-            }
-
-      - name: Debug - Test app server via bastion
-        env:
-          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
-          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
-          ANSIBLE_APP_HOST: ${{ secrets.ANSIBLE_APP_HOST }}
-        run: |
-          echo "=========================================="
-          echo "Testing connection to app server via bastion"
-          echo "App Host: $ANSIBLE_APP_HOST"
-          echo "Via Bastion: $ANSIBLE_BASTION_HOST"
-          echo "=========================================="
-          timeout 30 ssh -vvv \
-            -i ~/.ssh/farmsafe-key-3.pem \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=10 \
-            -o ProxyCommand="ssh -i ~/.ssh/farmsafe-key-3.pem -o StrictHostKeyChecking=no -W %h:%p $ANSIBLE_USER@$ANSIBLE_BASTION_HOST" \
-            $ANSIBLE_USER@$ANSIBLE_APP_HOST \
-            "echo 'App server connection successful' && hostname && whoami" || {
-              echo "ERROR: Cannot connect to app server via bastion!"
-              echo "This usually means:"
-              echo "1. App server security group doesn't allow SSH from bastion"
-              echo "2. Wrong app server private IP address"
-              echo "3. Network routing issue between bastion and app server"
-              exit 1
-            }
-
-      - name: Debug - Verify SSH key on bastion
-        env:
-          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
-          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
-        continue-on-error: true
-        run: |
-          echo "=========================================="
-          echo "Checking SSH configuration on bastion"
-          echo "=========================================="
-          ssh -i ~/.ssh/farmsafe-key-3.pem \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=10 \
-            $ANSIBLE_USER@$ANSIBLE_BASTION_HOST \
-            "echo 'Bastion user:' && whoami && echo 'SSH authorized keys count:' && wc -l ~/.ssh/authorized_keys && echo 'OS:' && cat /etc/os-release | grep PRETTY_NAME"
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "app ansible_host=${{ secrets.ANSIBLE_HOST }} ansible_user=${{ secrets.ANSIBLE_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > inventory.ini
 
       - name: Debug inventory
-        env:
-          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
-          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
-          ANSIBLE_APP_HOST: ${{ secrets.ANSIBLE_APP_HOST }}
         run: |
           echo "===== inventory.ini contents ====="
-          envsubst < inventory.ini
+          cat inventory.ini
           echo "================================="
 
       - name: Get ECR login token
@@ -258,18 +178,10 @@ EOF
       - name: Run Ansible playbook
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
-          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
-          ANSIBLE_APP_HOST: ${{ secrets.ANSIBLE_APP_HOST }}
         run: |
-          # Render inventory with environment variables
-          envsubst < inventory.ini > rendered-inventory.ini
-
-          echo "=========================================="
-          echo "Running Ansible deployment"
-          echo "=========================================="
-          
-          ansible-playbook -vvv \
-            -i rendered-inventory.ini \
+          ansible-playbook \
+            -i inventory.ini \
             --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }}" \
             FarmSafe/ansible/playbook.yml
+
+
