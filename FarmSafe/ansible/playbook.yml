@@ -2,13 +2,18 @@
 - hosts: all
   become: yes
   vars:
+    # Variables passed via --extra-vars
     docker_registry: "{{ docker_registry | default('') }}"
     backend_image: "{{ backend_image | default('') }}"
     frontend_image: "{{ frontend_image | default('') }}"
     aws_region: "{{ aws_region | default('us-east-1') }}"
     ecr_token: "{{ ecr_token | default('') }}"
-    jwt_secret: "{{ jwt_secret | default('') }}"
+    jwt_secret: "{{ jwt_secret | default('changeme') }}"
+    ansible_user: "{{ ansible_user }}" # Ensure user is accessible
+
   tasks:
+    # --- System Preparation Tasks (Swap File) ---
+
     - name: Check if swap file exists
       stat:
         path: /swapfile
@@ -31,67 +36,66 @@
     - name: Enable swap file
       command: swapon /swapfile
       when: not swap_file.stat.exists
-    - name: Check if pip3 is installed
-      command: which pip3
-      register: pip_check
-      ignore_errors: yes
 
-    - name: Check if unzip is installed
-      command: which unzip
-      register: unzip_check
-      ignore_errors: yes
+    # --- System Setup Tasks (Package Installation) ---
 
-    - name: Debug pip check
-      debug:
-        msg: "pip3 check: {{ pip_check }}"
+    # NOTE: The manual `which pip3`/`which unzip` checks and debug tasks are removed.
+    # The fix is to ensure these packages are installed first.
 
-    - name: Debug unzip check
-      debug:
-        msg: "unzip check: {{ unzip_check }}"
-
-    # --- System Setup Tasks ---
-
-    # --- System Setup Tasks ---
     - name: Update package index (dnf)
       dnf:
         update_cache: yes
+      become: yes
 
-    - name: Install required packages (dnf)
+    - name: Install required system packages (Docker, Python/Pip, Utilities)
       dnf:
         name:
+          - python3-pip           # <--- FIX: Essential for the `pip` module to work
           - docker
+          - unzip                 # <--- FIX: Ensure unzip is available (if needed)
+          - python3-dnf-plugin-versionlock
+          - docker-compose-plugin # <--- FIX: Install modern Docker Compose CLI plugin
         state: present
+      become: yes
 
     - name: Create Docker CLI plugins directory
       file:
         path: /usr/local/lib/docker/cli-plugins
         state: directory
         mode: '0755'
+      become: yes
 
+    # The original "Install Docker Compose" task is REMOVED because 
+    # the package is installed via DNF above.
 
-    - name: Install Docker Compose
+    - name: Install Python required packages (awscli and docker-py)
       pip:
-        name: docker-compose
+        name:
+          - awscli
+          - docker
+          - boto3 # Adding boto3 as it is often required for AWS modules/tasks
         executable: pip3
         state: present
+      become: yes
+
+    # --- Docker Service and Login Tasks ---
 
     - name: Start and enable Docker service
       service:
         name: docker
         state: started
         enabled: yes
+      become: yes
 
     - name: Add user to docker group
       user:
         name: "{{ ansible_user }}"
         groups: docker
         append: yes
-
-    - name: Install AWS CLI
-      pip:
-        name: awscli
-        executable: pip3
-        state: present
+      become: yes
+      # NOTE: This change may require reconnecting or running a separate play to take effect.
+      # However, since subsequent tasks use `become_user` with `environment: {HOME: ...}`, 
+      # the manual login steps below usually succeed without a full logout/login cycle.
 
     - name: Configure ECR login using provided token
       when: docker_registry != "" and ecr_token != ""
@@ -103,6 +107,8 @@
       register: ecr_login_token
       changed_when: false
       no_log: true
+      # NOTE: This task handles login, eliminating the need for `community.aws.ecr_login`
+      # if you provide the ECR token from the CI/CD pipeline.
 
     - name: Configure ECR login using IAM role (fallback)
       when: docker_registry != "" and ecr_token == ""
@@ -116,6 +122,8 @@
       changed_when: false
       failed_when: ecr_login_iam.rc != 0
 
+    # --- Deployment Tasks ---
+
     - name: Create application directory
       file:
         path: /opt/farmsafe
@@ -123,6 +131,7 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0755'
+      become: yes
 
     - name: Create production docker-compose file
       when: backend_image != ""
@@ -153,7 +162,7 @@
                 NODE_ENV: production
                 PORT: 5000
                 MONGO_URI: mongodb://mongodb:27017/farmsafe_db
-                JWT_SECRET: {{ jwt_secret | default('changeme') }}
+                JWT_SECRET: {{ jwt_secret }}
               ports:
                 - "5000:5000"
               depends_on:
@@ -183,6 +192,10 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
+      become: yes # Use become to ensure permissions are set correctly
+
+    # NOTE: Shell pull tasks are okay, but use the full `docker compose` binary/plugin path if possible
+    # or ensure the path is available, which the DNF install should handle.
 
     - name: Pull backend Docker image
       when: backend_image != ""
@@ -206,12 +219,7 @@
 
     - name: Stop existing containers
       when: backend_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose down
-        else
-          docker compose down
-        fi
+      shell: docker compose down # Rely on DNF installed `docker compose` plugin/binary
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -221,12 +229,7 @@
 
     - name: Start services with docker-compose
       when: backend_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose up -d
-        else
-          docker compose up -d
-        fi
+      shell: docker compose up -d # Rely on DNF installed `docker compose` plugin/binary
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
@@ -235,12 +238,7 @@
 
     - name: Verify services are running
       when: backend_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose ps
-        else
-          docker compose ps
-        fi
+      shell: docker compose ps # Rely on DNF installed `docker compose` plugin/binary
       args:
         chdir: /opt/farmsafe
       become_user: "{{ ansible_user }}"
