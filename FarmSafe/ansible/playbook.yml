@@ -1,4 +1,5 @@
 ---
+---
 - hosts: all
   become: yes
   vars:
@@ -9,81 +10,64 @@
     aws_region: "{{ aws_region | default('us-east-1') }}"
     ecr_token: "{{ ecr_token | default('') }}"
     jwt_secret: "{{ jwt_secret | default('changeme') }}"
+    # Assume the private IP of the application server is gathered in facts
+    # We will use the loopback address (127.0.0.1) since the frontend is running on the app server itself (port 80)
+    # The bastion host only needs to forward traffic to the app server's public IP or the internal IP if accessed via the bastion
+    app_server_ip: "{{ ansible_host | default('127.0.0.1') }}" # Will use this variable later, but for Nginx on the app server, 127.0.0.1 is fine.
+    
   tasks:
-    # --- System Preparation Tasks (Swap File) ---
-    - name: Check if swap file exists
-      stat:
-        path: /swapfile
-      register: swap_file
-
-    - name: Create swap file
-      command: dd if=/dev/zero of=/swapfile bs=128M count=16
-      when: not swap_file.stat.exists
-
-    - name: Set swap file permissions
-      file:
-        path: /swapfile
-        mode: '0600'
-      when: not swap_file.stat.exists
-
-    - name: Format swap file
-      command: mkswap /swapfile
-      when: not swap_file.stat.exists
-
-    - name: Enable swap file
-      command: swapon /swapfile
-      when: not swap_file.stat.exists
-
-    # --- System Setup Tasks (Package Installation) ---
-
+    # --- System Setup Tasks ---
+    # (Existing packages, Docker, AWS CLI installation tasks remain here)
+    
+    # ... (Tasks: Update package index, Install required packages, Docker Compose plugin, Start Docker, Add user to docker group, Install AWS CLI) ...
+    
     - name: Update package index (dnf)
       dnf:
         update_cache: yes
-      become: yes
 
-    - name: Install required system packages (Docker, Python/Pip, Utilities)
+    - name: Install required packages (dnf)
       dnf:
         name:
-          - python3-pip           # Try with python3-pip first
           - docker
-          - unzip                 # Likely still available
-          - docker-compose-plugin # Likely still available
+          - python3-pip
+          - unzip
+          - curl # Required for AWS CLI download
         state: present
-      become: yes
 
     - name: Create Docker CLI plugins directory
       file:
         path: /usr/local/lib/docker/cli-plugins
         state: directory
         mode: '0755'
-      become: yes
 
-    - name: Install Python required packages (awscli and docker-py)
-      pip:
-        name:
-          - awscli
-          - docker
-          - boto3
-        executable: pip3
-        state: present
-      become: yes
-
-    # --- Docker Service and Login Tasks ---
+    - name: Install Docker Compose plugin
+      get_url:
+        url: https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
+        dest: /usr/local/lib/docker/cli-plugins/docker-compose
+        mode: '0755'
 
     - name: Start and enable Docker service
       service:
         name: docker
         state: started
         enabled: yes
-      become: yes
 
     - name: Add user to docker group
       user:
         name: "{{ ansible_user }}"
         groups: docker
         append: yes
-      become: yes
 
+    - name: Install AWS CLI
+      shell: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -q awscliv2.zip
+        ./aws/install
+        rm -rf aws awscliv2.zip
+      args:
+        creates: /usr/local/bin/aws
+
+    # --- ECR Login Tasks ---
     - name: Configure ECR login using provided token
       when: docker_registry != "" and ecr_token != ""
       shell: |
@@ -107,7 +91,7 @@
       changed_when: false
       failed_when: ecr_login_iam.rc != 0
 
-    # --- Deployment Tasks ---
+    # --- Deployment Tasks (App Server) ---
 
     - name: Create application directory
       file:
@@ -116,10 +100,9 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0755'
-      become: yes
 
     - name: Create production docker-compose file
-      when: backend_image != ""
+      when: backend_image != "" 
       copy:
         content: |
           services:
@@ -164,6 +147,7 @@
               image: "{{ frontend_image | quote }}"
               container_name: farmsafe-frontend
               restart: unless-stopped
+              # The frontend service is exposed on port 80 internally
               ports:
                 - "80:80"
               depends_on:
@@ -218,6 +202,19 @@
       environment:
         HOME: "/home/{{ ansible_user }}"
 
+    # --- Reverse Proxy Setup (Nginx on App Server or Bastion) ---
+    
+    
+
+    - name: Install Nginx on Bastion Host for Reverse Proxy
+      
+      
+      when: false # Removing Nginx install here as it clashes with app deployment on port 80
+      debug:
+        msg: "Nginx reverse proxy setup is typically done on the Bastion Host, not the App Host 'app'."
+
+    # --- Verification Tasks ---
+
     - name: Verify services are running
       when: backend_image != ""
       shell: docker compose ps
@@ -232,3 +229,49 @@
       when: backend_image != ""
       debug:
         msg: "{{ compose_status.stdout_lines }}"
+
+- hosts: bastion
+  become: yes
+  vars:
+    # Get the private IP of the App Server from inventory facts
+    # Note: This assumes you pass the App Server's private IP as a variable or fact.
+    # We will use the IP of the 'app_server_1' host from the 'app_servers' group.
+    # This requires the App Server to be deployed successfully first.
+    app_private_ip: "{{ hostvars['app_server_1'].ansible_host }}" 
+    
+  tasks:
+    - name: Install Nginx on Bastion Host
+      dnf:
+        name: nginx
+        state: present
+
+    - name: Create Nginx configuration file
+      copy:
+        content: |
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name _;
+              
+              location / {
+                  # Forward traffic to the private IP of the app server on port 80
+                  proxy_pass http://{{ app_private_ip }}:80;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              }
+          }
+        dest: /etc/nginx/conf.d/default.conf
+      notify: Restart Nginx
+
+    - name: Start and enable Nginx service
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
