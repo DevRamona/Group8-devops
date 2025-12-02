@@ -18,10 +18,15 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.ANSIBLE_BASTION_HOST }} >> ~/.ssh/known_hosts
-          ssh-keyscan -H ${{ secrets.ANSIBLE_APP_HOST }} >> ~/.ssh/known_hosts
+          # Only scan bastion host (public IP) - app host is private and unreachable directly
+          ssh-keyscan -H ${{ secrets.ANSIBLE_BASTION_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+      - name: Verify SSH connection to bastion
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@${{ secrets.ANSIBLE_BASTION_HOST }} "echo 'Bastion connection successful'"
 
       - name: Deploy to EC2
         env:
