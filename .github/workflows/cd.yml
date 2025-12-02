@@ -127,18 +127,37 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push image
-        id: build-and-push
+      - name: Build and push backend image
+        id: build-backend
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:backend-${{ env.IMAGE_TAG }}
+          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:backend-latest
 
           docker build \
             -f $DOCKERFILE_PATH \
             -t $IMAGE_URI \
             $APP_DOCKER_CONTEXT
+
+          docker tag $IMAGE_URI $LATEST_URI
+          docker push $IMAGE_URI
+          docker push $LATEST_URI
+
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push frontend image
+        id: build-frontend
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:frontend-${{ env.IMAGE_TAG }}
+          LATEST_URI=$REGISTRY/${{ env.ECR_REPOSITORY }}:frontend-latest
+
+          docker build \
+            -f FarmSafe/frontend/Dockerfile \
+            -t $IMAGE_URI \
+            FarmSafe/frontend
 
           docker tag $IMAGE_URI $LATEST_URI
           docker push $IMAGE_URI
@@ -271,5 +290,22 @@ EOF
           
           ansible-playbook -vvv \
             -i rendered-inventory.ini \
-            --extra-vars "docker_registry=$REGISTRY docker_image=${{ steps.build-and-push.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }}" \
+            --extra-vars "docker_registry=$REGISTRY backend_image=${{ steps.build-backend.outputs.image_uri }} frontend_image=${{ steps.build-frontend.outputs.image_uri }} aws_region=${{ env.AWS_REGION }} ecr_token=${{ steps.ecr-token.outputs.token }} jwt_secret=${{ secrets.JWT_SECRET }}" \
             FarmSafe/ansible/playbook.yml
+
+      - name: Prepare bastion inventory
+        env:
+          ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
+          ANSIBLE_BASTION_HOST: ${{ secrets.ANSIBLE_BASTION_HOST }}
+        run: |
+          SSH_KEY_PATH="$HOME/.ssh/farmsafe-key-3.pem"
+          echo "bastion ansible_host=$ANSIBLE_BASTION_HOST ansible_user=$ANSIBLE_USER ansible_ssh_private_key_file=$SSH_KEY_PATH ansible_ssh_common_args='-o StrictHostKeyChecking=no'" > bastion-inventory.ini
+
+      - name: Configure nginx on bastion
+        env:
+          ANSIBLE_APP_HOST: ${{ secrets.ANSIBLE_APP_HOST }}
+        run: |
+          ansible-playbook -vvv \
+            -i bastion-inventory.ini \
+            --extra-vars "app_private_ip=$ANSIBLE_APP_HOST" \
+            FarmSafe/ansible/bastion-playbook.yml
