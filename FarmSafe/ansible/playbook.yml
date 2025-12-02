@@ -1,22 +1,25 @@
+---
 - hosts: all
   become: yes
-  vars:
-    docker_registry: "{{ docker_registry | default('') }}"
-    docker_image: "{{ docker_image | default('') }}"
-    aws_region: "{{ aws_region | default('us-east-1') }}"
-    ecr_token: "{{ ecr_token | default('') }}"
+  
   tasks:
-    - name: Update package index (dnf)
+    - name: Update package index
       dnf:
         update_cache: yes
+        state: present
 
-    - name: Install required packages (dnf)
+    - name: Install required system packages
       dnf:
         name:
           - docker
-          - python3-pip
+          - git
           - unzip
+          - python3-pip
         state: present
+      register: dnf_result
+      retries: 3
+      delay: 10
+      until: dnf_result is succeeded
 
     - name: Create Docker CLI plugins directory
       file:
@@ -29,6 +32,8 @@
         url: https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64
         dest: /usr/local/lib/docker/cli-plugins/docker-compose
         mode: '0755'
+      retries: 3
+      delay: 5
 
     - name: Start and enable Docker service
       service:
@@ -36,157 +41,41 @@
         state: started
         enabled: yes
 
+    - name: Set default user variable
+      set_fact:
+        target_user: "{{ ansible_user | default(ansible_env.USER) | default('ec2-user') }}"
+
     - name: Add user to docker group
       user:
-        name: "{{ ansible_user }}"
+        name: "{{ target_user }}"
         groups: docker
         append: yes
 
-    - name: Install AWS CLI
-      shell: |
-        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-        unzip -q awscliv2.zip
-        ./aws/install
-        rm -rf aws awscliv2.zip
-      args:
-        creates: /usr/local/bin/aws
-
-    - name: Configure ECR login using provided token
-      when: docker_registry != "" and ecr_token != ""
-      shell: |
-        echo "{{ ecr_token }}" | docker login --username AWS --password-stdin {{ docker_registry }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: ecr_login_token
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
       changed_when: false
-      no_log: true
 
-    - name: Configure ECR login using IAM role (fallback)
-      when: docker_registry != "" and ecr_token == ""
-      shell: |
-        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ docker_registry }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        AWS_DEFAULT_REGION: "{{ aws_region }}"
-        HOME: "/home/{{ ansible_user }}"
-      register: ecr_login_iam
+    - name: Verify Docker Compose installation
+      command: docker compose version
+      register: compose_version
       changed_when: false
-      failed_when: ecr_login_iam.rc != 0
 
-    - name: Create application directory
-      file:
-        path: /opt/farmsafe
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0755'
-
-    - name: Create production docker-compose file
-      when: docker_image != ""
-      copy:
-        content: |
-          services:
-            mongodb:
-              image: mongo:7.0
-              container_name: farmsafe-mongodb
-              restart: unless-stopped
-              ports:
-                - "27017:27017"
-              environment:
-                MONGO_INITDB_DATABASE: farmsafe_db
-              volumes:
-                - mongodb_data:/data/db
-              healthcheck:
-                test: ["CMD", "mongosh", "localhost:27017/farmsafe_db", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
-                interval: 10s
-                timeout: 5s
-                retries: 5
-
-            backend:
-              image: "{{ docker_image | quote }}"
-              container_name: farmsafe-backend
-              restart: unless-stopped
-              environment:
-                NODE_ENV: production
-                PORT: 5000
-                MONGO_URI: mongodb://mongodb:27017/farmsafe_db
-                JWT_SECRET: ${JWT_SECRET:-changeme}
-              ports:
-                - "5000:5000"
-              depends_on:
-                mongodb:
-                  condition: service_healthy
-              healthcheck:
-                test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
-                interval: 30s
-                timeout: 3s
-                retries: 3
-                start_period: 10s
-
-          volumes:
-            mongodb_data:
-              driver: local
-        dest: /opt/farmsafe/docker-compose.yml
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0644'
-
-    - name: Pull latest Docker image
-      when: docker_image != ""
-      shell: docker pull {{ docker_image | quote }}
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: docker_pull
-      retries: 3
-      delay: 5
-
-    - name: Stop existing containers
-      when: docker_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose down
-        else
-          docker compose down
-        fi
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      ignore_errors: yes
-
-    - name: Start services with docker-compose
-      when: docker_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose up -d
-        else
-          docker compose up -d
-        fi
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-
-    - name: Verify services are running
-      when: docker_image != ""
-      shell: |
-        if command -v docker-compose &> /dev/null; then
-          docker-compose ps
-        else
-          docker compose ps
-        fi
-      args:
-        chdir: /opt/farmsafe
-      become_user: "{{ ansible_user }}"
-      environment:
-        HOME: "/home/{{ ansible_user }}"
-      register: compose_status
-
-    - name: Display service status
-      when: docker_image != ""
+    - name: Display installation status
       debug:
-        msg: "{{ compose_status.stdout_lines }}"
+        msg:
+          - "Docker: {{ docker_version.stdout }}"
+          - "Docker Compose: {{ compose_version.stdout }}"
+          - "VM is ready for application deployment!"
+
+    - name: Verify network connectivity
+      uri:
+        url: https://github.com
+        method: GET
+      register: network_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Display network status
+      debug:
+        msg: "Network connectivity: {{ 'OK' if network_check.status == 200 else 'Failed - check security group egress rules' }}"

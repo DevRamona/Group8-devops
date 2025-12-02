@@ -99,6 +99,24 @@ resource "aws_security_group" "app" {
     cidr_blocks = [var.vpc_cidr]
   }
 
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
+  egress {
+    description = "Allow HTTPS outbound to internet (for package downloads)"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # tfsec:ignore:aws-ec2-no-public-egress-sgr
+  egress {
+    description = "Allow HTTP outbound to internet (for package downloads)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = merge(
     local.tags,
     {
