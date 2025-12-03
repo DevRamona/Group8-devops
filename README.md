@@ -9,7 +9,7 @@ FarmSafe addresses critical challenges faced by smallholder farmers in Rwanda, w
 ## Team Members
 
 - Nana Koramah Abeasi - Frontend developer
-- Ramona Ingabire - DevOps Engineers
+- Ingabire Ramona - DevOps Engineers
 - Cecilia Munayani Banda - Backend developer/ DevSecOps Tasks
 
 ## Project Overview
