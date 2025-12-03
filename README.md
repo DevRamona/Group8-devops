@@ -198,22 +198,34 @@ The infrastructure is managed with Terraform and includes:
 
 ## CI/CD Pipeline
 
-### GitHub Actions
+### GitHub Actions (CI)
 
 The project includes a CI pipeline (`.github/workflows/ci.yml`) that:
-- Triggers on pushes to any branch (except main) and pull requests to main
-- Runs linting checks for both backend and frontend
-- Executes TypeScript type checking
-- Runs tests (minimum 1 test required)
-- Builds Docker images to validate containerization
-- Validates docker-compose configuration
+- **Triggers**: on pushes to feature branches and on pull requests targeting `main`
+- **Quality checks**:
+  - **Linting** for both backend and frontend
+  - **TypeScript type checking**
+- **Safety checks**:
+  - **Tests** (at least one test required to pass)
+  - **Container validation**: builds Docker images and validates `docker-compose` configuration
 
-### Deployment Pipeline
+### Deployment Pipeline (CD)
 
 The CD pipeline (`.github/workflows/cd.yml`) automatically:
-- Builds and pushes Docker images to Amazon ECR
-- Deploys the application to the EC2 instance using Ansible
-- Configures nginx on the bastion host for public access
+- **Triggers** on pushes to the `main` branch
+- **Uses SSH** to connect securely to the bastion host using a GitHub Actions secret-backed SSH key
+- **Jumps from bastion → app instance** using an SSH `ProxyJump` configuration
+- **Fetches and deploys the latest code** on the application instance by:
+  - Stashing any local changes on the server (to avoid conflicts)
+  - Hard-resetting to `origin/main`
+  - Rebuilding and restarting all services with `docker compose down`, `docker compose build --no-cache`, and `docker compose up -d`
+- **Performs health checks** on:
+  - Backend: `http://localhost:5000`
+  - Frontend: `http://localhost`
+- **Publishes a deployment summary** in the GitHub Actions run, including:
+  - Deployment status
+  - Commit SHA and author
+  - **Production URL**: `http://farmsafe-dev-alb-1865447178.us-east-1.elb.amazonaws.com/`
 
 ### Running Tests Locally
 
@@ -231,6 +243,89 @@ The `main` branch is protected and requires:
 - CI checks to pass before merging
 - Code review from team members
 - No direct pushes (must use pull requests)
+
+## Git-to-Production Workflow
+
+This section describes the end-to-end flow from a code change in Git to a live deployment in production.
+
+1. **Create a feature branch**
+   - From your local machine:
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feature/<short-description>
+   ```
+2. **Make a small, visible change**
+   - For example, update a button label or heading in the frontend so the change is easy to see in production.
+   - Commit your work:
+   ```bash
+   git add .
+   git commit -m "feat: update dashboard button text"
+   git push -u origin feature/<short-description>
+   ```
+3. **Open a Pull Request (PR) into `main`**
+   - Go to the GitHub repository.
+   - Create a PR from `feature/<short-description>` into `main`.
+   - Describe the change briefly and link to any relevant issue or task.
+4. **CI checks run automatically**
+   - GitHub Actions runs the CI workflow (`ci.yml`) on the PR:
+     - **Linting**, **type checking**, **tests**, and **container validation** must all succeed.
+   - The PR will show green status checks when CI passes.
+5. **Review and merge the PR**
+   - A teammate reviews the PR.
+   - Once approvals and status checks are in place, merge into `main` (no direct pushes allowed).
+6. **CD pipeline deploys to production**
+   - The push to `main` triggers the CD workflow (`cd.yml`).
+   - The workflow connects over SSH to the bastion host, jumps to the private app instance, pulls the latest code, rebuilds Docker images, restarts services, and performs health checks.
+   - A deployment summary is attached to the GitHub Actions run (including commit, author, and production URL).
+7. **Verify the change is live**
+   - Open the production URL in a browser:
+     - `http://farmsafe-dev-alb-1865447178.us-east-1.elb.amazonaws.com/`
+   - Confirm that the visible change (e.g., updated button text) is present in the UI.
+
+This is the same Git-to-production flow you should demonstrate in your 10–15 minute video.
+
+## Operations & Troubleshooting
+
+- **CI/CD logs**
+  - **CI**: Check the `Actions` tab in GitHub for runs of `ci.yml` on your branch or PR.
+  - **CD**: Check `cd.yml` runs (triggered on `main`) for detailed deployment logs, including SSH connection steps, Docker rebuild, and health checks.
+- **SSH access**
+  - Use the bastion host as a jump box for debugging:
+  ```bash
+  ssh -i <your-key.pem> ec2-user@<bastion-public-ip>
+  # From bastion, SSH to the private app instance if needed
+  ssh ec2-user@<app-private-ip>
+  ```
+- **Docker and application logs on the app instance**
+  - To see running containers:
+  ```bash
+  docker compose ps
+  ```
+  - To follow logs for all services:
+  ```bash
+  docker compose logs -f
+  ```
+  - If services are unhealthy, restart them:
+  ```bash
+  docker compose down
+  docker compose up -d
+  ```
+- **Common issues**
+  - **CI fails**:
+    - Run the same commands locally (`npm test`, `npm run lint`, `npm run build`) in both `backend` and `frontend` to reproduce and fix.
+  - **CD fails**:
+    - Inspect the `cd.yml` job logs in GitHub Actions for SSH errors, Git issues, or Docker build errors.
+  - **App not reachable from the browser**:
+    - Confirm the production URL is correct and DNS has propagated.
+    - Check that the load balancer and security groups allow HTTP traffic (port 80).
+    - Verify that containers are up and passing health checks on the app instance.
+
+## Demo Video
+
+To see the complete Git-to-production workflow in action, refer to the recorded demo video:
+
+- **Git-to-Production Demo (10–15 minutes)**: _link to be added once the video is uploaded (e.g., YouTube, Google Drive, or institutional platform)_
 
 ## Project Structure
 
@@ -309,9 +404,10 @@ FarmSafe/
 
 ## Live Application
 
-**Application URL**:
+**Application URLs**:
 
- `http://13.219.156.186` 
+- Main app: `http://farmsafe-dev-alb-1865447178.us-east-1.elb.amazonaws.com/`
+- Login page: `http://farmsafe-dev-alb-1865447178.us-east-1.elb.amazonaws.com/login`
 
 ## Links
 
