@@ -325,7 +325,7 @@ This is the same Git-to-production flow you should demonstrate in your 10–15 m
 
 To see the complete Git-to-production workflow in action, refer to the recorded demo video:
 
-- **Git-to-Production Demo (10–15 minutes)**: _link to be added once the video is uploaded (e.g., YouTube, Google Drive, or institutional platform)_
+- **Git-to-Production Demo (10–15 minutes)**: [FarmSafe CI/CD Demo (Google Drive)](https://drive.google.com/drive/u/0/folders/1C_Lv-LpN8gMN7RAgkzrFJOcX06yJQLul)
 
 ## Project Structure
 
